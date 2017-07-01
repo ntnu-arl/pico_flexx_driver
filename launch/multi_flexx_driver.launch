@@ -1,0 +1,102 @@
+<launch>
+  <!-- Name of the node_1. All topics will be advertised under this name. -->
+  <arg name="base_name_1"          default="pico_flexx_1"/>
+  <!-- Name of the node_2. All topics will be advertised under this name. -->
+  <arg name="base_name_2"          default="pico_flexx_2"/>
+  <!-- Name of the node_3. All topics will be advertised under this name. -->
+  <arg name="base_name_3"          default="pico_flexx_3"/>
+  <!-- ID of the sensor_1 that should be used. IDs of all connected devices are listed on startup. -->
+  <arg name="sensor_1"             default="0005-1207-0034-1512"/>
+  <!-- ID of the sensor_2 that should be used. IDs of all connected devices are listed on startup. -->
+  <arg name="sensor_2"             default="0005-1207-0034-1211"/>
+  <!-- ID of the sensor_2 that should be used. IDs of all connected devices are listed on startup. -->
+  <arg name="sensor_3"             default="0005-1207-0034-0508"/>
+  <!-- ID of the use case. A list of supported use cases is listed on startup. -->
+  <arg name="use_case"           default="0"/>
+  <!-- Enable or disable automatic expusure. -->
+  <arg name="automatic_exposure" default="true"/>
+  <!-- Exposure time. Only for manual exposure. -->
+  <arg name="exposure_time"      default="1000"/>
+  <!-- Maximum allowed noise. Data with higher noise will be filtered out. -->
+  <arg name="max_noise"          default="0.07"/> <!--0.07 0.035 0.0025-->
+  <!-- Range of the 16-Bit mono image which should be mapped to the 0-255 range of the 8-Bit mono image. The resulting range is `range_factor` times the standard deviation arround mean. -->
+  <arg name="range_factor"       default="2.0"/>
+  <!-- Queue size for publisher. -->
+  <arg name="queue_size"         default="5"/>
+  <!-- Publish a static TF transform for the optical frame of the camera. -->
+  <arg name="publish_tf"         default="false" />
+  <!-- Base name of the tf_1 frames. -->
+  <arg name="base_name_tf_1"       default="$(arg base_name_1)"/>
+  <!-- Base name of the tf_2 frames. -->
+  <arg name="base_name_tf_2"       default="$(arg base_name_2)"/>
+  <!-- Base name of the tf_3 frames. -->
+  <arg name="base_name_tf_3"       default="$(arg base_name_3)"/>
+  <!-- Machine on with the nodes should run. -->
+  <arg name="machine"            default="localhost"/>
+  <!-- Whether the machine for localhost should be defined our not. Disable this if the launch file is included somewhere where machines are already defined. -->
+  <arg name="define_machine"     default="true"/>
+  <!-- Name of the nodelet manager. -->
+  <arg name="nodelet_manager"    default="pico_flexx_manager"/>
+  <!-- Whether to start a nodelet manager our not. Disable this if a different nodelet manager should be used. -->
+  <arg name="start_manager"      default="true"/>
+
+  <!-- Default machine definition. -->
+  <machine name="localhost" address="localhost" if="$(arg define_machine)"/>
+
+  <!-- Static TF_1 publisher. -->
+  <node pkg="tf" type="static_transform_publisher" name="$(arg base_name_1)_static_tf" machine="$(arg machine)" if="$(arg publish_tf)"
+        args="0 0 0 0 0 -1.57079632679489661923 $(arg base_name_tf_1)_link $(arg base_name_tf_1)_optical_frame 100" />
+  <!-- Static TF_2 publisher. -->
+  <node pkg="tf" type="static_transform_publisher" name="$(arg base_name_2)_static_tf" machine="$(arg machine)" if="$(arg publish_tf)"
+        args="0 0 0 0 0 -1.57079632679489661923 $(arg base_name_tf_2)_link $(arg base_name_tf_2)_optical_frame 100" />
+  <!-- Static TF_3 publisher. -->
+  <node pkg="tf" type="static_transform_publisher" name="$(arg base_name_3)_static_tf" machine="$(arg machine)" if="$(arg publish_tf)"
+        args="0 0 0 0 0 -1.57079632679489661923 $(arg base_name_tf_3)_link $(arg base_name_tf_3)_optical_frame 100" />
+
+  <!-- Nodelet manager. -->
+  <node pkg="nodelet" type="nodelet" name="$(arg nodelet_manager)" args="manager"
+        if="$(arg start_manager)" machine="$(arg machine)" output="screen"/>
+
+  <!-- pico_flexx_driver nodelet_1. -->
+  <node pkg="nodelet" type="nodelet" name="$(arg base_name_1)_driver" machine="$(arg machine)"
+        args="load pico_flexx_driver/pico_flexx_nodelet $(arg nodelet_manager)"
+        respawn="true" output="screen">
+    <param name="base_name"          type="str"    value="$(arg base_name_1)"/>
+    <param name="sensor"             type="str"    value="$(arg sensor_1)"/>
+    <param name="use_case"           type="int"    value="$(arg use_case)"/>
+    <param name="automatic_exposure" type="bool"   value="$(arg automatic_exposure)"/>
+    <param name="exposure_time"      type="int"    value="$(arg exposure_time)"/>
+    <param name="max_noise"          type="double" value="$(arg max_noise)"/>
+    <param name="range_factor"       type="double" value="$(arg range_factor)"/>
+    <param name="queue_size"         type="int"    value="$(arg queue_size)"/>
+    <param name="base_name_tf"       type="str"    value="$(arg base_name_tf_1)"/>
+  </node>
+  <!-- pico_flexx_driver nodelet_2. -->
+  <node pkg="nodelet" type="nodelet" name="$(arg base_name_2)_driver" machine="$(arg machine)"
+        args="load pico_flexx_driver/pico_flexx_nodelet $(arg nodelet_manager)"
+        respawn="true" output="screen">
+    <param name="base_name"          type="str"    value="$(arg base_name_2)"/>
+    <param name="sensor"             type="str"    value="$(arg sensor_2)"/>
+    <param name="use_case"           type="int"    value="$(arg use_case)"/>
+    <param name="automatic_exposure" type="bool"   value="$(arg automatic_exposure)"/>
+    <param name="exposure_time"      type="int"    value="$(arg exposure_time)"/>
+    <param name="max_noise"          type="double" value="$(arg max_noise)"/>
+    <param name="range_factor"       type="double" value="$(arg range_factor)"/>
+    <param name="queue_size"         type="int"    value="$(arg queue_size)"/>
+    <param name="base_name_tf"       type="str"    value="$(arg base_name_tf_2)"/>
+  </node>
+  <!-- pico_flexx_driver nodelet_3. -->
+  <node pkg="nodelet" type="nodelet" name="$(arg base_name_3)_driver" machine="$(arg machine)"
+        args="load pico_flexx_driver/pico_flexx_nodelet $(arg nodelet_manager)"
+        respawn="true" output="screen">
+    <param name="base_name"          type="str"    value="$(arg base_name_3)"/>
+    <param name="sensor"             type="str"    value="$(arg sensor_3)"/>
+    <param name="use_case"           type="int"    value="$(arg use_case)"/>
+    <param name="automatic_exposure" type="bool"   value="$(arg automatic_exposure)"/>
+    <param name="exposure_time"      type="int"    value="$(arg exposure_time)"/>
+    <param name="max_noise"          type="double" value="$(arg max_noise)"/>
+    <param name="range_factor"       type="double" value="$(arg range_factor)"/>
+    <param name="queue_size"         type="int"    value="$(arg queue_size)"/>
+    <param name="base_name_tf"       type="str"    value="$(arg base_name_tf_3)"/>
+  </node>
+</launch>

@@ -18,10 +18,6 @@
  * along with pico_flexx_driver.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-//Customization
-//#define PUB_IMAGES
-//#define PUB_CLOUD
-
 #include <iostream>
 #include <string>
 #include <vector>
@@ -121,17 +117,7 @@ private:
   ros::NodeHandle nh, priv_nh;
   sensor_msgs::CameraInfo cameraInfo;
   std::vector<std::vector<ros::Publisher>> publisher;
-
-  //Customization
-  ros::Publisher extraPublisher;
-  //Customization
-
   std::vector<std::vector<bool>> status;
-
-  //Customization
-  bool extraStatus;
-  //Customization
-
   boost::recursive_mutex lockServer;
   dynamic_reconfigure::Server<pico_flexx_driver::pico_flexx_driverConfig> server;
   pico_flexx_driver::pico_flexx_driverConfig configMin, configMax, config;
@@ -184,10 +170,6 @@ public:
     configMin.max_noise = 0.0;
     configMin.range_factor = 0.0;
 
-    //Customization
-    config.min_depth = 0.0;
-    //Customization
-
     configMax.use_case = 5;
     configMax.exposure_mode = 1;
     configMax.exposure_time = 2000;
@@ -195,10 +177,6 @@ public:
     configMax.exposure_time_stream2 = 2000;
     configMax.max_noise = 0.10;
     configMax.range_factor = 7.0;
-
-    //Customization
-    configMax.min_depth = 10.0;
-    //Customization
   }
 
   ~PicoFlexx()
@@ -299,11 +277,6 @@ public:
         clientsConnected = clientsConnected || status[i][j];
       }
     }
-
-    //Customization
-    extraStatus = extraPublisher.getNumSubscribers() > 0;
-    clientsConnected |= extraStatus;
-    //Customization
 
     bool isCapturing(false);
     cameraDevice->isCapturing(isCapturing);
@@ -467,16 +440,6 @@ public:
       lockStatus.unlock();
     }
 
-    //Customization
-    if(level & 0x80)
-    {
-      OUT_INFO("reconfigured min_depth (Customization): " << FG_MAGENTA << config.min_depth << " meters" << NO_COLOR);
-      lockStatus.lock();
-      this->config.min_depth = config.min_depth;
-      lockStatus.unlock();
-    }
-    //Customization
-
     if(level & (0x01 | 0x02 | 0x04))
     {
       royale::Pair<uint32_t, uint32_t> limits;
@@ -516,10 +479,6 @@ private:
     std::string sensor, baseName;
     double maxNoise, rangeFactor;
 
-    //Customization
-    double minDepth;
-    //Customization
-
     priv_nh.param("base_name", baseName, std::string(PF_DEFAULT_NS));
     priv_nh.param("sensor", sensor, std::string(""));
     priv_nh.param("use_case", useCase, 0);
@@ -532,10 +491,6 @@ private:
     priv_nh.param("queue_size", queueSize, 2);
     priv_nh.param("base_name_tf", baseNameTF, baseName);
 
-    //Customization
-    priv_nh.param("min_depth", minDepth, 0.0);
-    //Customization
-
     OUT_INFO("parameter:" << std::endl
              << "                 base_name: " FG_CYAN << baseName << NO_COLOR << std::endl
              << "                    sensor: " FG_CYAN << (sensor.empty() ? "default" : sensor) << NO_COLOR << std::endl
@@ -545,11 +500,6 @@ private:
              << "             exposure_time: " FG_CYAN << exposureTime << NO_COLOR << std::endl
              << "     exposure_time_stream2: " FG_CYAN << exposureTimeStream2 << NO_COLOR << std::endl
              << "                 max_noise: " FG_CYAN << maxNoise << " meters" NO_COLOR << std::endl
-
-	     //Customization
-             << "         min_depth (Customization): " FG_MAGENTA << minDepth << " meters" NO_COLOR << std::endl
-	     //Customization
-
              << "              range_factor: " FG_CYAN << rangeFactor << NO_COLOR << std::endl
              << "                queue_size: " FG_CYAN << queueSize << NO_COLOR << std::endl
              << "              base_name_tf: " FG_CYAN << baseNameTF << NO_COLOR);
@@ -601,10 +551,6 @@ private:
     config.max_noise = std::max(std::min(maxNoise, configMax.max_noise), configMin.max_noise);
     config.range_factor = std::max(std::min(rangeFactor, configMax.range_factor), configMin.range_factor);
 
-    //Customization
-    config.min_depth = std::max(std::min(minDepth, configMax.min_depth), configMin.min_depth);
-    //Customization
-
     server.setConfigDefault(config);
 
     dynamic_reconfigure::Server<pico_flexx_driver::pico_flexx_driverConfig>::CallbackType f;
@@ -621,42 +567,19 @@ private:
 
     publisher[0].resize(COUNT);
     publisher[0][CAMERA_INFO] = nh.advertise<sensor_msgs::CameraInfo>(baseName + PF_TOPIC_INFO, queueSize, cb, cb);
-
-    //Customization
-    #ifdef PUB_IMAGES
     publisher[0][MONO_8] = nh.advertise<sensor_msgs::Image>(baseName + PF_TOPIC_MONO8, queueSize, cb, cb);
     publisher[0][MONO_16] = nh.advertise<sensor_msgs::Image>(baseName + PF_TOPIC_MONO16, queueSize, cb, cb);
     publisher[0][DEPTH] = nh.advertise<sensor_msgs::Image>(baseName + PF_TOPIC_DEPTH, queueSize, cb, cb);
     publisher[0][NOISE] = nh.advertise<sensor_msgs::Image>(baseName + PF_TOPIC_NOISE, queueSize, cb, cb);
-    #endif //PUB_IMAGES
-    //Customization
-    //Customization
-    #ifdef PUB_CLOUD
     publisher[0][CLOUD] = nh.advertise<sensor_msgs::PointCloud2>(baseName + PF_TOPIC_CLOUD, queueSize, cb, cb);
-    #endif //PUB_CLOUD
-    //Customization
-
-    //Customization
-    extraPublisher = nh.advertise<sensor_msgs::PointCloud2>(baseName + PF_TOPIC_CLOUD + "_reduced", queueSize, cb, cb);
-    //Customization
 
     publisher[1].resize(COUNT);
     publisher[1][CAMERA_INFO] = nh.advertise<sensor_msgs::CameraInfo>(baseName + "/stream2" + PF_TOPIC_INFO, queueSize, cb, cb);
-
-    //Customization
-    #ifdef PUB_IMAGES
     publisher[1][MONO_8] = nh.advertise<sensor_msgs::Image>(baseName + "/stream2" + PF_TOPIC_MONO8, queueSize, cb, cb);
     publisher[1][MONO_16] = nh.advertise<sensor_msgs::Image>(baseName + "/stream2" + PF_TOPIC_MONO16, queueSize, cb, cb);
     publisher[1][DEPTH] = nh.advertise<sensor_msgs::Image>(baseName + "/stream2" + PF_TOPIC_DEPTH, queueSize, cb, cb);
     publisher[1][NOISE] = nh.advertise<sensor_msgs::Image>(baseName + "/stream2" + PF_TOPIC_NOISE, queueSize, cb, cb);
-    #endif //PUB_IMAGES
-    //Customization
-    //Customization
-    #ifdef PUB_CLOUD
     publisher[1][CLOUD] = nh.advertise<sensor_msgs::PointCloud2>(baseName + "/stream2" + PF_TOPIC_CLOUD, queueSize, cb, cb);
-    #endif //PUB_CLOUD
-    //Customization
-
   }
 
   bool selectCamera(const std::string &id)
@@ -998,20 +921,12 @@ private:
     sensor_msgs::ImagePtr msgMono8, msgMono16, msgDepth, msgNoise;
     sensor_msgs::PointCloud2Ptr msgCloud;
 
-    //Customization
-    sensor_msgs::PointCloud2Ptr msgCloudReduced;
-    //Customization
-
     msgCameraInfo = sensor_msgs::CameraInfoPtr(new sensor_msgs::CameraInfo);
     msgMono8 = sensor_msgs::ImagePtr(new sensor_msgs::Image);
     msgMono16 = sensor_msgs::ImagePtr(new sensor_msgs::Image);
     msgDepth = sensor_msgs::ImagePtr(new sensor_msgs::Image);
     msgNoise = sensor_msgs::ImagePtr(new sensor_msgs::Image);
     msgCloud = sensor_msgs::PointCloud2Ptr(new sensor_msgs::PointCloud2);
-
-    //Customization
-    msgCloudReduced = sensor_msgs::PointCloud2Ptr(new sensor_msgs::PointCloud2);
-    //Customization
 
     std::chrono::high_resolution_clock::time_point start, end;
     std::unique_lock<std::mutex> lock(lockData);
@@ -1031,8 +946,8 @@ private:
       size_t streamIndex;
       if (findStreamIndex(data->streamId, streamIndex))
       {
-        extractData(*data, msgCameraInfo, msgCloud, msgCloudReduced, msgMono8, msgMono16, msgDepth, msgNoise, streamIndex);
-        publish(msgCameraInfo, msgCloud, msgCloudReduced, msgMono8, msgMono16, msgDepth, msgNoise, streamIndex);
+        extractData(*data, msgCameraInfo, msgCloud, msgMono8, msgMono16, msgDepth, msgNoise, streamIndex);
+        publish(msgCameraInfo, msgCloud, msgMono8, msgMono16, msgDepth, msgNoise, streamIndex);
       }
       lockStatus.unlock();
 
@@ -1061,7 +976,7 @@ private:
     return true;
   }
 
-  void extractData(const royale::DepthData &data, sensor_msgs::CameraInfoPtr &msgCameraInfo, sensor_msgs::PointCloud2Ptr &msgCloud, sensor_msgs::PointCloud2Ptr &msgCloudReduced,
+  void extractData(const royale::DepthData &data, sensor_msgs::CameraInfoPtr &msgCameraInfo, sensor_msgs::PointCloud2Ptr &msgCloud,
                    sensor_msgs::ImagePtr &msgMono8, sensor_msgs::ImagePtr &msgMono16, sensor_msgs::ImagePtr &msgDepth, sensor_msgs::ImagePtr &msgNoise,
                    size_t streamIndex = 0) const
   {
@@ -1078,18 +993,11 @@ private:
       msgCameraInfo->width = data.width;
     }
 
-    if(!(status[streamIndex][MONO_8] || status[streamIndex][MONO_16] || status[streamIndex][DEPTH] || status[streamIndex][NOISE] || status[streamIndex][CLOUD])
-        //Customization
-        && !extraStatus)
-        //Customization
+    if(!(status[streamIndex][MONO_8] || status[streamIndex][MONO_16] || status[streamIndex][DEPTH] || status[streamIndex][NOISE] || status[streamIndex][CLOUD]))
     {
       return;
     }
 
-    //Customization
-    #ifdef PUB_IMAGES
-    //Customization
-    if (status[MONO_16]){
     msgMono16->header = header;
     msgMono16->height = data.height;
     msgMono16->width = data.width;
@@ -1097,11 +1005,7 @@ private:
     msgMono16->encoding = sensor_msgs::image_encodings::MONO16;
     msgMono16->step = (uint32_t)(sizeof(uint16_t) * data.width);
     msgMono16->data.resize(sizeof(uint16_t) * data.points.size());
-    }
-    //Customization
 
-    //Customization
-    if (status[DEPTH]){
     msgDepth->header = header;
     msgDepth->height = data.height;
     msgDepth->width = data.width;
@@ -1109,11 +1013,7 @@ private:
     msgDepth->encoding = sensor_msgs::image_encodings::TYPE_32FC1;
     msgDepth->step = (uint32_t)(sizeof(float) * data.width);
     msgDepth->data.resize(sizeof(float) * data.points.size());
-    }
-    //Customization
 
-    //Customization
-    if (status[NOISE]){
     msgNoise->header = header;
     msgNoise->height = data.height;
     msgNoise->width = data.width;
@@ -1121,15 +1021,7 @@ private:
     msgNoise->encoding = sensor_msgs::image_encodings::TYPE_32FC1;
     msgNoise->step = (uint32_t)(sizeof(float) * data.width);
     msgNoise->data.resize(sizeof(float) * data.points.size());
-    }
-    //Customization
-    #endif //PUB_IMAGES
-    //Customization 
- 
-    //Customization
-    #ifdef PUB_CLOUD
-    //Customization
-    if (status[CLOUD]){
+
     msgCloud->header = header;
     msgCloud->height = data.height;
     msgCloud->width = data.width;
@@ -1163,213 +1055,44 @@ private:
     msgCloud->fields[5].datatype = sensor_msgs::PointField::UINT8;
     msgCloud->fields[5].count = 1;
     msgCloud->data.resize(msgCloud->point_step * data.points.size());
-    }
-    //Customization
-    #endif //PUB_CLOUD
-    //Customization
-
-    //Customization
-    const unsigned int EXTRASTEP = 3*sizeof(float) + 1*sizeof(uint16_t);
-    if (extraStatus){
-    msgCloudReduced->header = header;
-    msgCloudReduced->height = data.height;
-    msgCloudReduced->width = data.width;
-    msgCloudReduced->is_bigendian = false;
-    msgCloudReduced->is_dense = false;
-    //msgCloudReduced->point_step = (uint32_t)(3 * sizeof(float));
-    //msgCloudReduced->row_step = (uint32_t)(3 * sizeof(float) * data.width);
-    //msgCloudReduced->fields.resize(3);
-      msgCloudReduced->point_step = (uint32_t)(EXTRASTEP);
-      msgCloudReduced->row_step = (uint32_t)(EXTRASTEP * data.width);
-      msgCloudReduced->fields.resize(4);
-    msgCloudReduced->fields[0].name = "x";
-    msgCloudReduced->fields[0].offset = 0;
-    msgCloudReduced->fields[0].datatype = sensor_msgs::PointField::FLOAT32;
-    msgCloudReduced->fields[0].count = 1;
-    msgCloudReduced->fields[1].name = "y";
-    msgCloudReduced->fields[1].offset = msgCloudReduced->fields[0].offset + (uint32_t)sizeof(float);
-    msgCloudReduced->fields[1].datatype = sensor_msgs::PointField::FLOAT32;
-    msgCloudReduced->fields[1].count = 1;
-    msgCloudReduced->fields[2].name = "z";
-    msgCloudReduced->fields[2].offset = msgCloudReduced->fields[1].offset + (uint32_t)sizeof(float);
-    msgCloudReduced->fields[2].datatype = sensor_msgs::PointField::FLOAT32;
-    msgCloudReduced->fields[2].count = 1;
-      msgCloudReduced->fields[3].name = "intensity";
-      msgCloudReduced->fields[3].offset = msgCloudReduced->fields[2].offset + (uint32_t)sizeof(float);
-      msgCloudReduced->fields[3].datatype = sensor_msgs::PointField::UINT16;
-      msgCloudReduced->fields[3].count = 1;
-    //msgCloudReduced->data.resize(3 * sizeof(float) * data.points.size());
-      msgCloudReduced->data.resize(EXTRASTEP * data.points.size());
-    }
-    //Customization
 
     const float invalid = std::numeric_limits<float>::quiet_NaN();
     const float maxNoise = (float)config.max_noise;
-
-    //Customization
-    const float minDepth = (float)config.min_depth;
-    //Customization
-
     const royale::DepthPoint *itI = &data.points[0];
-
-    //Customization
-    #ifdef PUB_IMAGES
-    //Customization
-    float *itD = nullptr;
-    if (status[DEPTH]){
-    /*float **/itD = (float *)&msgDepth->data[0];
-    }
-    //Customization
-    //Customization
-    float *itN = nullptr;
-    if (status[NOISE]){
-    /*float **/itN = (float *)&msgNoise->data[0];
-    }
-    //Customization
-    //Customization
-    uint16_t *itM = nullptr;
-    if (status[MONO_16]){
-    /*uint16_t **/itM = (uint16_t *)&msgMono16->data[0];
-    }
-    //Customization
-    #endif //PUB_IMAGES
-    //Customization
-
-    //Customization
-    unsigned int extraOffset = 0;
-    //Customization
-
-    for(size_t i = 0; i < data.points.size(); ++i, ++itI
-       //Customization
-       #ifdef PUB_IMAGES
-       , ++itD, ++itM, ++itN,
-       #endif //PUB_IMAGES
-       //Customization
-       //Customization
-       , extraOffset += EXTRASTEP
-       //Customization
-       )
+    float *itD = (float *)&msgDepth->data[0];
+    float *itN = (float *)&msgNoise->data[0];
+    uint16_t *itM = (uint16_t *)&msgMono16->data[0];
+    for(size_t i = 0; i < data.points.size(); ++i, ++itI, ++itD, ++itM, ++itN)
     {
-      //Customization
-      #ifdef PUB_CLOUD  
-      //Customization
-      float *itCX=nullptr, *itCY=nullptr, *itCZ=nullptr, *itCN=nullptr;
-      uint16_t *itCM=nullptr;
-      if (status[CLOUD]){
       float *itCX = (float *)&msgCloud->data[i * msgCloud->point_step];
       float *itCY = itCX + 1;
       float *itCZ = itCY + 1;
       float *itCN = itCZ + 1;                    // "noise" field
       uint16_t *itCM = (uint16_t *)(itCN + 1);   // "intensity" field
-      }
-      //Customization
-      #endif //PUB_CLOUD
-      //Customization
 
-      //Customization
-      #if defined(PUB_CLOUD) || defined(PUB_IMAGES)  
-      //Customization
-      if (status[CLOUD]){
-      if(itI->depthConfidence /*&& itI->noise < maxNoise*/ 
-        //Customization
-        && itI->z >= minDepth)
-        //Customization
+      if(itI->depthConfidence && itI->noise < maxNoise)
       {
-        //Customization
-        #ifdef PUB_CLOUD
         *itCX = itI->x;
         *itCY = itI->y;
         *itCZ = itI->z;
         *itCN = itI->noise;
-        #endif //PUB_CLOUD
-        //Customization
-        //Customization
-        #ifdef PUB_IMAGES
-        //Customization
-        if (status[DEPTH]){
         *itD = itI->z;
-        }
-        //Customization
-        //Customization
-        if (status[NOISE]){
         *itN = itI->noise;
-        }
-        //Customization
-        #endif //PUB_IMAGES
-        //Customization
       }
       else
       {
-        //Customization
-        #ifdef PUB_CLOUD
         *itCX = invalid;
         *itCY = invalid;
         *itCZ = invalid;
         *itCN = 0.0f;
-        #endif //PUB_CLOUD
-        //Customization
-        #ifdef PUB_IMAGES
-        //Customization
-        //Customization
-        if (status[DEPTH]){
         *itD = 0.0f;
-        }
-        //Customization
-        //Customization
-        if (status[NOISE]){
         *itN = 0.0f;
-        }
-        //Customization
-        #endif //PUB_IMAGES
-        //Customization
       }
-      //Customization
-      #ifdef PUB_CLOUD
       *itCM = itI->grayValue;
-      #endif //PUB_CLOUD
-      //Customization
-      }
-      //Customization
-      #endif //defined(PUB_CLOUD) || defined(PUB_IMAGES)  
-      //Customization
-      //Customization
-      #ifdef PUB_IMAGES
-      //Customization
-      if (status[MONO_16]){
       *itM = itI->grayValue;
-      }
-      //Customization
-      #endif //PUB_IMAGES
-      //Customization
-
-      //Customization
-      if (extraStatus){
-      if(itI->depthConfidence && itI->noise < maxNoise && itI->z >= minDepth){
-        memcpy(&msgCloudReduced->data[extraOffset], &itI->x, sizeof(float));
-        memcpy(&msgCloudReduced->data[extraOffset + 4], &itI->y, sizeof(float));
-        memcpy(&msgCloudReduced->data[extraOffset + 8], &itI->z, sizeof(float));
-      }
-      else{
-        float badZ = -itI->z;
-        memcpy(&msgCloudReduced->data[extraOffset], &itI->x, sizeof(float));
-        memcpy(&msgCloudReduced->data[extraOffset + 4], &itI->y, sizeof(float));
-        memcpy(&msgCloudReduced->data[extraOffset + 8], &badZ, sizeof(float));
-      }
-      memcpy(&msgCloudReduced->data[extraOffset + 12], &itI->grayValue, sizeof(uint16_t));
-      }
-      //Customization
-
     }
 
-    //Customization
-    #ifdef PUB_IMAGES
-    //Customization
-    if (status[MONO_8] && status[MONO_16] && status[CLOUD]){ //defensively make it safe
     computeMono8(msgMono16, msgMono8, msgCloud);
-    }
-    //Customization
-    #endif //PUB_IMAGES
-    //Customization
   }
 
   void computeMono8(const sensor_msgs::ImageConstPtr &msgMono16, sensor_msgs::ImagePtr &msgMono8, sensor_msgs::PointCloud2Ptr &msgCloud) const
@@ -1440,7 +1163,7 @@ private:
     }
   }
 
-  void publish(sensor_msgs::CameraInfoPtr &msgCameraInfo, sensor_msgs::PointCloud2Ptr &msgCloud, sensor_msgs::PointCloud2Ptr &msgCloudReduced,
+  void publish(sensor_msgs::CameraInfoPtr &msgCameraInfo, sensor_msgs::PointCloud2Ptr &msgCloud,
                sensor_msgs::ImagePtr &msgMono8, sensor_msgs::ImagePtr &msgMono16,
                sensor_msgs::ImagePtr &msgDepth, sensor_msgs::ImagePtr &msgNoise,
                size_t streamIndex = 0) const
@@ -1450,9 +1173,6 @@ private:
       publisher[streamIndex][CAMERA_INFO].publish(msgCameraInfo);
       msgCameraInfo = sensor_msgs::CameraInfoPtr(new sensor_msgs::CameraInfo);
     }
-
-    //Customization
-    #ifdef PUB_IMAGES
     if(status[streamIndex][MONO_8])
     {
       publisher[streamIndex][MONO_8].publish(msgMono8);
@@ -1473,26 +1193,11 @@ private:
       publisher[streamIndex][NOISE].publish(msgNoise);
       msgNoise = sensor_msgs::ImagePtr(new sensor_msgs::Image);
     }
-    #endif //PUB_IMAGES
-    //Customization
-
-    //Customization
-    #ifdef PUB_CLOUD
     if(status[streamIndex][CLOUD])
     {
       publisher[streamIndex][CLOUD].publish(msgCloud);
       msgCloud = sensor_msgs::PointCloud2Ptr(new sensor_msgs::PointCloud2);
     }
-    #endif //PUB_CLOUD
-    //Customization
-
-    //Customization
-    if (extraStatus){
-      extraPublisher.publish(msgCloudReduced);
-      msgCloudReduced = sensor_msgs::PointCloud2Ptr(new sensor_msgs::PointCloud2);
-    }
-    //Customization
-
   }
 
   void timings()
