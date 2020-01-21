@@ -1124,8 +1124,8 @@ private:
     }
     //Customization
     #endif //PUB_IMAGES
-    //Customization 
- 
+    //Customization
+
     //Customization
     #ifdef PUB_CLOUD
     //Customization
@@ -1251,7 +1251,7 @@ private:
        )
     {
       //Customization
-      #ifdef PUB_CLOUD  
+      #ifdef PUB_CLOUD
       //Customization
       float *itCX=nullptr, *itCY=nullptr, *itCZ=nullptr, *itCN=nullptr;
       uint16_t *itCM=nullptr;
@@ -1267,10 +1267,10 @@ private:
       //Customization
 
       //Customization
-      #if defined(PUB_CLOUD) || defined(PUB_IMAGES)  
+      #if defined(PUB_CLOUD) || defined(PUB_IMAGES)
       //Customization
       if (status[CLOUD]){
-      if(itI->depthConfidence /*&& itI->noise < maxNoise*/ 
+      if(itI->depthConfidence /*&& itI->noise < maxNoise*/
         //Customization
         && itI->z >= minDepth)
         //Customization
@@ -1330,7 +1330,7 @@ private:
       //Customization
       }
       //Customization
-      #endif //defined(PUB_CLOUD) || defined(PUB_IMAGES)  
+      #endif //defined(PUB_CLOUD) || defined(PUB_IMAGES)
       //Customization
       //Customization
       #ifdef PUB_IMAGES
@@ -1350,10 +1350,11 @@ private:
         memcpy(&msgCloudReduced->data[extraOffset + 8], &itI->z, sizeof(float));
       }
       else{
-        float badZ = -itI->z;
-        memcpy(&msgCloudReduced->data[extraOffset], &itI->x, sizeof(float));
-        memcpy(&msgCloudReduced->data[extraOffset + 4], &itI->y, sizeof(float));
-        memcpy(&msgCloudReduced->data[extraOffset + 8], &badZ, sizeof(float));
+        // Tung: Turn this off
+        // float badZ = -itI->z;
+        // memcpy(&msgCloudReduced->data[extraOffset], &itI->x, sizeof(float));
+        // memcpy(&msgCloudReduced->data[extraOffset + 4], &itI->y, sizeof(float));
+        // memcpy(&msgCloudReduced->data[extraOffset + 8], &badZ, sizeof(float));
       }
       memcpy(&msgCloudReduced->data[extraOffset + 12], &itI->grayValue, sizeof(uint16_t));
       }
