@@ -2,7 +2,7 @@
   <!-- Name of the node. All topics will be advertised under this name. -->
   <arg name="base_name"          default="pico_flexx"/>
   <!-- ID of the sensor that should be used. IDs of all connected devices are listed on startup. -->
-  <arg name="sensor"             default=""/>
+  <arg name="sensor"             default="0007-2109-0181-0506"/>
   <!-- ID of the use case. A list of supported use cases is listed on startup. -->
   <arg name="use_case"           default="0"/>
   <!-- Enable or disable automatic expusure. -->
