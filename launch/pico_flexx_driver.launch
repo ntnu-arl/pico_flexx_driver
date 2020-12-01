@@ -27,6 +27,10 @@
   <arg name="nodelet_manager"    default="$(arg base_name)"/>
   <!-- Whether to start a nodelet manager our not. Disable this if a different nodelet manager should be used. -->
   <arg name="start_manager"      default="true"/>
+  <!-- Drop points below -->
+  <arg name="min_depth"      default="0.1"/>
+  <!-- Points in Free Space. -->
+  <arg name="max_depth"      default="4.0"/>
 
   <!-- Default machine definition. -->
   <machine name="localhost" address="localhost" if="$(arg define_machine)"/>
@@ -52,5 +56,7 @@
     <param name="range_factor"       type="double" value="$(arg range_factor)"/>
     <param name="queue_size"         type="int"    value="$(arg queue_size)"/>
     <param name="base_name_tf"       type="str"    value="$(arg base_name_tf)"/>
+    <param name="min_depth"         type="double"     value="$(arg min_depth)"/>
+    <param name="max_depth"         type="double"     value="$(arg max_depth)"/>
   </node>
 </launch>

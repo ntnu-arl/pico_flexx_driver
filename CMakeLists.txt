@@ -34,6 +34,16 @@ find_package(catkin REQUIRED COMPONENTS
 ## System dependencies are found with CMake's conventions
 find_package(royale REQUIRED)
 
+# combine cmake_cxx_flags and additional_cxx_flags
+# plus change the space-separated string, into a list delimited by semicolons
+# cxx_flags will be used with target_compile_options (cleaner than changing CMAKE_CXX_FLAGS) 
+string(REPLACE " " ";" cxx_flags "${CMAKE_CXX_FLAGS} ${additional_cxx_flags}")
+# debugging output
+MESSAGE( STATUS "CMAKE_CXX_FLAGS: " ${CMAKE_CXX_FLAGS})
+MESSAGE( STATUS "additional_cxx_flags: " ${additional_cxx_flags})
+MESSAGE( STATUS "cxx_flags: ${cxx_flags}")
+MESSAGE( STATUS "royale version: ${royale_VERSION}")
+
 ################################################
 ## Declare ROS messages, services and actions ##
 ################################################
@@ -83,14 +93,20 @@ target_link_libraries(pico_flexx_nodelet
   ${catkin_LIBRARIES}
   ${royale_LIBRARIES}
 )
-add_dependencies(pico_flexx_nodelet ${PROJECT_NAME}_gencfg)
+add_dependencies(pico_flexx_nodelet ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+target_compile_options(pico_flexx_nodelet PUBLIC ${cxx_flags})
+target_compile_definitions(pico_flexx_nodelet PUBLIC royale_VERSION_MAJOR=${royale_VERSION_MAJOR} royale_VERSION_MINOR=${royale_VERSION_MINOR})
 
 add_executable(pico_flexx_driver src/pico_flexx_driver.cpp)
 target_link_libraries(pico_flexx_driver
   ${catkin_LIBRARIES}
   ${royale_LIBRARIES}
 )
-add_dependencies(pico_flexx_driver ${PROJECT_NAME}_gencfg)
+add_dependencies(pico_flexx_driver ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+target_compile_options(pico_flexx_driver PUBLIC ${cxx_flags})
+target_compile_definitions(pico_flexx_driver PUBLIC royale_VERSION_MAJOR=${royale_VERSION_MAJOR} royale_VERSION_MINOR=${royale_VERSION_MINOR})
+
+
 
 #############
 ## Install ##
