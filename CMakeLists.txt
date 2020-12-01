@@ -51,7 +51,9 @@ generate_dynamic_reconfigure_options(
 ## LIBRARIES: libraries you create in this project that dependent projects also need
 ## CATKIN_DEPENDS: catkin_packages dependent projects also need
 ## DEPENDS: system dependencies of this project that dependent projects also need
-catkin_package(
+catkin_package(  
+  INCLUDE_DIRS
+    ${Eigen_INCLUDE_DIRS}
   CATKIN_DEPENDS nodelet roscpp rostime sensor_msgs std_msgs dynamic_reconfigure
 )
 
@@ -70,6 +72,7 @@ add_custom_target(additional_files_${PROJECT_NAME}
 include_directories(
   ${catkin_INCLUDE_DIRS}
   ${royale_INCLUDE_DIRS}
+  ${Eigen_INCLUDE_DIRS}
 )
 
 link_directories(${royale_LIB_DIR})

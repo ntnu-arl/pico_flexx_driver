@@ -45,6 +45,9 @@
 #include <dynamic_reconfigure/server.h>
 #include <pico_flexx_driver/pico_flexx_driverConfig.h>
 
+// #include <Eigen/Dense>
+#include <eigen3/Eigen/Dense>
+
 #define PF_DEFAULT_NS       "pico_flexx"
 #define PF_TF_LINK          "_link"
 #define PF_TF_OPT_FRAME     "_optical_frame"
@@ -122,16 +125,16 @@ private:
 	sensor_msgs::CameraInfo cameraInfo;
 	std::vector<std::vector<ros::Publisher>> publisher;
 
-	//Customization
 	ros::Publisher points_publisher;
 	ros::Publisher free_points_publisher;
-	//Customization
 
 	std::vector<std::vector<bool>> status;
 
-	//Customization
-	bool extraStatus;
-	//Customization
+	bool pub_status;
+
+	std::vector<float> frustum_endpoints_x;
+	std::vector<float> frustum_endpoints_y;
+	std::vector<float> frustum_endpoints_z;
 
 	boost::recursive_mutex lockServer;
 	dynamic_reconfigure::Server<pico_flexx_driver::pico_flexx_driverConfig> server;
@@ -185,9 +188,7 @@ public:
 		configMin.max_noise = 0.0;
 		configMin.range_factor = 0.0;
 
-		//Customization
 		config.min_depth = 0.0;
-		//Customization
 
 		configMax.use_case = 5;
 		configMax.exposure_mode = 1;
@@ -197,9 +198,8 @@ public:
 		configMax.max_noise = 0.10;
 		configMax.range_factor = 7.0;
 
-		//Customization
 		configMax.min_depth = 10.0;
-		//Customization
+
 	}
 
 	~PicoFlexx()
@@ -302,8 +302,8 @@ public:
 		}
 
 		//Customization
-		extraStatus = points_publisher.getNumSubscribers() > 0 || free_points_publisher.getNumSubscribers() > 0;
-		clientsConnected |= extraStatus;
+		pub_status = points_publisher.getNumSubscribers() > 0 || free_points_publisher.getNumSubscribers() > 0;
+		clientsConnected |= pub_status;
 		//Customization
 
 		bool isCapturing(false);
@@ -504,6 +504,54 @@ public:
 
 private:
 
+	void init_frustrum()
+	{
+		// FOV -> Radians -> half
+		double h_FOV_rad = 62.0 * M_PI / 180.0;
+		double v_FOV_rad = 45.0 * M_PI / 180.0;
+		double h_lim_2 = h_FOV_rad / 2.0;
+    	double v_lim_2 = v_FOV_rad / 2.0;
+		double h_res = 224.0;
+		double v_res = 171.0;
+		double h_res_inc  = h_FOV_rad / h_res;
+		double v_res_inc  = v_FOV_rad / v_res;
+
+		double max_range = 4.0;
+		
+		frustum_endpoints_x.resize(int(h_res), 0.0);
+		frustum_endpoints_y.resize(int(h_res), 0.0);
+		frustum_endpoints_z.resize(int(v_res), 0.0);
+
+
+		// Top to Bottom
+		for(int row_i = 0; row_i < v_res; ++row_i)
+		{
+			float dv = (row_i*v_res_inc) - v_lim_2;
+			float x = float(max_range * sin(dv));
+			frustum_endpoints_x[row_i] = x;
+		}
+		for(int col_i = 0; col_i < h_res; ++col_i)
+		{
+			float dh = (col_i*h_res_inc) - h_lim_2;
+			float z = float(max_range * cos(dh));
+			float y = float(max_range * sin(dh));
+			frustum_endpoints_z[col_i] = z;
+			frustum_endpoints_y[col_i] = y;
+		}
+		// for(int col_i = 0; col_i < v_res; ++col_i)
+		// {
+
+		// 	for(int row_i = 0; row_i < v_res; ++row_i)
+		// 	{
+		// 		float x = frustum_endpoints_x[col_i];
+		// 		float y = frustum_endpoints_y[col_i];
+		// 		float z = frustum_endpoints_z[row_i];
+		// 		ROS_INFO("%f,%f,%f, sizes = %i,%i,%i", x,y,z, frustum_endpoints_x.size(), frustum_endpoints_y.size(), frustum_endpoints_z.size());
+		// 	}
+		// }
+
+	}
+
 	bool initialize()
 	{
 		if(running)
@@ -611,6 +659,8 @@ private:
 		dynamic_reconfigure::Server<pico_flexx_driver::pico_flexx_driverConfig>::CallbackType f;
 		f = boost::bind(&PicoFlexx::callbackConfig, this, _1, _2);
 		server.setCallback(f);
+
+		init_frustrum();
 
 		return true;
 	}
@@ -1025,7 +1075,7 @@ private:
 			{
 				continue;
 			}
-
+			
 			start = std::chrono::high_resolution_clock::now();
 			this->data.swap(data);
 			newData = false;
@@ -1075,402 +1125,119 @@ private:
 		header.seq = 0;
 		header.stamp.fromNSec(std::chrono::duration_cast<std::chrono::nanoseconds>(data.timeStamp).count());
 
-		if(status[streamIndex][CAMERA_INFO])
-		{
-			*msgCameraInfo = cameraInfo;
-			msgCameraInfo->header = header;
-			msgCameraInfo->height = data.height;
-			msgCameraInfo->width = data.width;
-		}
-
-		if(!(status[streamIndex][MONO_8] || status[streamIndex][MONO_16] || status[streamIndex][DEPTH] || status[streamIndex][NOISE] || status[streamIndex][CLOUD])
-				//Customization
-				&& !extraStatus)
-				//Customization
+		if(!pub_status)
 		{
 			return;
 		}
-
-		//Customization
-		#ifdef PUB_IMAGES
-		//Customization
-		if (status[MONO_16]){
-		msgMono16->header = header;
-		msgMono16->height = data.height;
-		msgMono16->width = data.width;
-		msgMono16->is_bigendian = false;
-		msgMono16->encoding = sensor_msgs::image_encodings::MONO16;
-		msgMono16->step = (uint32_t)(sizeof(uint16_t) * data.width);
-		msgMono16->data.resize(sizeof(uint16_t) * data.points.size());
-		}
-		//Customization
-
-		//Customization
-		if (status[DEPTH]){
-		msgDepth->header = header;
-		msgDepth->height = data.height;
-		msgDepth->width = data.width;
-		msgDepth->is_bigendian = false;
-		msgDepth->encoding = sensor_msgs::image_encodings::TYPE_32FC1;
-		msgDepth->step = (uint32_t)(sizeof(float) * data.width);
-		msgDepth->data.resize(sizeof(float) * data.points.size());
-		}
-		//Customization
-
-		//Customization
-		if (status[NOISE]){
-		msgNoise->header = header;
-		msgNoise->height = data.height;
-		msgNoise->width = data.width;
-		msgNoise->is_bigendian = false;
-		msgNoise->encoding = sensor_msgs::image_encodings::TYPE_32FC1;
-		msgNoise->step = (uint32_t)(sizeof(float) * data.width);
-		msgNoise->data.resize(sizeof(float) * data.points.size());
-		}
-		//Customization
-		#endif //PUB_IMAGES
-		//Customization
-
-		//Customization
-		#ifdef PUB_CLOUD
-		//Customization
-		if (status[CLOUD]){
-		msgCloud->header = header;
-		msgCloud->height = data.height;
-		msgCloud->width = data.width;
-		msgCloud->is_bigendian = false;
-		msgCloud->is_dense = false;
-		msgCloud->point_step = (uint32_t)(4 * sizeof(float) + sizeof(u_int16_t) + sizeof(u_int8_t));
-		msgCloud->row_step = (uint32_t)(msgCloud->point_step * data.width);
-		msgCloud->fields.resize(6);
-		msgCloud->fields[0].name = "x";
-		msgCloud->fields[0].offset = 0;
-		msgCloud->fields[0].datatype = sensor_msgs::PointField::FLOAT32;
-		msgCloud->fields[0].count = 1;
-		msgCloud->fields[1].name = "y";
-		msgCloud->fields[1].offset = msgCloud->fields[0].offset + (uint32_t)sizeof(float);
-		msgCloud->fields[1].datatype = sensor_msgs::PointField::FLOAT32;
-		msgCloud->fields[1].count = 1;
-		msgCloud->fields[2].name = "z";
-		msgCloud->fields[2].offset = msgCloud->fields[1].offset + (uint32_t)sizeof(float);
-		msgCloud->fields[2].datatype = sensor_msgs::PointField::FLOAT32;
-		msgCloud->fields[2].count = 1;
-		msgCloud->fields[3].name = "noise";
-		msgCloud->fields[3].offset = msgCloud->fields[2].offset + (uint32_t)sizeof(float);
-		msgCloud->fields[3].datatype = sensor_msgs::PointField::FLOAT32;
-		msgCloud->fields[3].count = 1;
-		msgCloud->fields[4].name = "intensity";
-		msgCloud->fields[4].offset = msgCloud->fields[3].offset + (uint32_t)sizeof(float);
-		msgCloud->fields[4].datatype = sensor_msgs::PointField::UINT16;
-		msgCloud->fields[4].count = 1;
-		msgCloud->fields[5].name = "gray";
-		msgCloud->fields[5].offset = msgCloud->fields[4].offset + (uint32_t)sizeof(uint16_t);
-		msgCloud->fields[5].datatype = sensor_msgs::PointField::UINT8;
-		msgCloud->fields[5].count = 1;
-		msgCloud->data.resize(msgCloud->point_step * data.points.size());
-		}
-		//Customization
-		#endif //PUB_CLOUD
-		//Customization
-
 		//Customization
 		const unsigned int EXTRASTEP = 3*sizeof(float) + 1*sizeof(uint16_t);
-		if (extraStatus)
-		{
-			msgCloudReduced->header = header;
-			msgCloudReduced->height = data.height;
-			msgCloudReduced->width = data.width;
-			msgCloudReduced->is_bigendian = false;
-			msgCloudReduced->is_dense = false;
-			msgCloudReduced->point_step = (uint32_t)(EXTRASTEP);
-			msgCloudReduced->row_step = (uint32_t)(EXTRASTEP * data.width);
-			msgCloudReduced->fields.resize(4);
-			msgCloudReduced->fields[0].name = "x";
-			msgCloudReduced->fields[0].offset = 0;
-			msgCloudReduced->fields[0].datatype = sensor_msgs::PointField::FLOAT32;
-			msgCloudReduced->fields[0].count = 1;
-			msgCloudReduced->fields[1].name = "y";
-			msgCloudReduced->fields[1].offset = msgCloudReduced->fields[0].offset + (uint32_t)sizeof(float);
-			msgCloudReduced->fields[1].datatype = sensor_msgs::PointField::FLOAT32;
-			msgCloudReduced->fields[1].count = 1;
-			msgCloudReduced->fields[2].name = "z";
-			msgCloudReduced->fields[2].offset = msgCloudReduced->fields[1].offset + (uint32_t)sizeof(float);
-			msgCloudReduced->fields[2].datatype = sensor_msgs::PointField::FLOAT32;
-			msgCloudReduced->fields[2].count = 1;
-			msgCloudReduced->fields[3].name = "intensity";
-			msgCloudReduced->fields[3].offset = msgCloudReduced->fields[2].offset + (uint32_t)sizeof(float);
-			msgCloudReduced->fields[3].datatype = sensor_msgs::PointField::UINT16;
-			msgCloudReduced->fields[3].count = 1;
-			msgCloudReduced->data.resize(EXTRASTEP * data.points.size());
 
-			msgCloudFree->header = header;
-			msgCloudFree->height = data.height;
-			msgCloudFree->width = data.width;
-			msgCloudFree->is_bigendian = false;
-			msgCloudFree->is_dense = false;
-			msgCloudFree->point_step = (uint32_t)(EXTRASTEP);
-			msgCloudFree->row_step = (uint32_t)(EXTRASTEP * data.width);
-			msgCloudFree->fields.resize(4);
-			msgCloudFree->fields[0].name = "x";
-			msgCloudFree->fields[0].offset = 0;
-			msgCloudFree->fields[0].datatype = sensor_msgs::PointField::FLOAT32;
-			msgCloudFree->fields[0].count = 1;
-			msgCloudFree->fields[1].name = "y";
-			msgCloudFree->fields[1].offset = msgCloudFree->fields[0].offset + (uint32_t)sizeof(float);
-			msgCloudFree->fields[1].datatype = sensor_msgs::PointField::FLOAT32;
-			msgCloudFree->fields[1].count = 1;
-			msgCloudFree->fields[2].name = "z";
-			msgCloudFree->fields[2].offset = msgCloudFree->fields[1].offset + (uint32_t)sizeof(float);
-			msgCloudFree->fields[2].datatype = sensor_msgs::PointField::FLOAT32;
-			msgCloudFree->fields[2].count = 1;
-			msgCloudFree->fields[3].name = "intensity";
-			msgCloudFree->fields[3].offset = msgCloudFree->fields[2].offset + (uint32_t)sizeof(float);
-			msgCloudFree->fields[3].datatype = sensor_msgs::PointField::UINT16;
-			msgCloudFree->fields[3].count = 1;
-			msgCloudFree->data.resize(EXTRASTEP * data.points.size());
-		}
-		//Customization
+		msgCloudReduced->header = header;
+		msgCloudReduced->height = data.height;
+		msgCloudReduced->width = data.width;
+		msgCloudReduced->is_bigendian = false;
+		msgCloudReduced->is_dense = false;
+		msgCloudReduced->point_step = (uint32_t)(EXTRASTEP);
+		msgCloudReduced->row_step = (uint32_t)(EXTRASTEP * data.width);
+		msgCloudReduced->fields.resize(4);
+		msgCloudReduced->fields[0].name = "x";
+		msgCloudReduced->fields[0].offset = 0;
+		msgCloudReduced->fields[0].datatype = sensor_msgs::PointField::FLOAT32;
+		msgCloudReduced->fields[0].count = 1;
+		msgCloudReduced->fields[1].name = "y";
+		msgCloudReduced->fields[1].offset = msgCloudReduced->fields[0].offset + (uint32_t)sizeof(float);
+		msgCloudReduced->fields[1].datatype = sensor_msgs::PointField::FLOAT32;
+		msgCloudReduced->fields[1].count = 1;
+		msgCloudReduced->fields[2].name = "z";
+		msgCloudReduced->fields[2].offset = msgCloudReduced->fields[1].offset + (uint32_t)sizeof(float);
+		msgCloudReduced->fields[2].datatype = sensor_msgs::PointField::FLOAT32;
+		msgCloudReduced->fields[2].count = 1;
+		msgCloudReduced->fields[3].name = "intensity";
+		msgCloudReduced->fields[3].offset = msgCloudReduced->fields[2].offset + (uint32_t)sizeof(float);
+		msgCloudReduced->fields[3].datatype = sensor_msgs::PointField::UINT16;
+		msgCloudReduced->fields[3].count = 1;
+		msgCloudReduced->data.resize(EXTRASTEP * data.points.size());
+
+		msgCloudFree->header = header;
+		msgCloudFree->height = data.height;
+		msgCloudFree->width = data.width;
+		msgCloudFree->is_bigendian = false;
+		msgCloudFree->is_dense = false;
+		msgCloudFree->point_step = (uint32_t)(EXTRASTEP);
+		msgCloudFree->row_step = (uint32_t)(EXTRASTEP * data.width);
+		msgCloudFree->fields.resize(4);
+		msgCloudFree->fields[0].name = "x";
+		msgCloudFree->fields[0].offset = 0;
+		msgCloudFree->fields[0].datatype = sensor_msgs::PointField::FLOAT32;
+		msgCloudFree->fields[0].count = 1;
+		msgCloudFree->fields[1].name = "y";
+		msgCloudFree->fields[1].offset = msgCloudFree->fields[0].offset + (uint32_t)sizeof(float);
+		msgCloudFree->fields[1].datatype = sensor_msgs::PointField::FLOAT32;
+		msgCloudFree->fields[1].count = 1;
+		msgCloudFree->fields[2].name = "z";
+		msgCloudFree->fields[2].offset = msgCloudFree->fields[1].offset + (uint32_t)sizeof(float);
+		msgCloudFree->fields[2].datatype = sensor_msgs::PointField::FLOAT32;
+		msgCloudFree->fields[2].count = 1;
+		msgCloudFree->fields[3].name = "intensity";
+		msgCloudFree->fields[3].offset = msgCloudFree->fields[2].offset + (uint32_t)sizeof(float);
+		msgCloudFree->fields[3].datatype = sensor_msgs::PointField::UINT16;
+		msgCloudFree->fields[3].count = 1;
+		msgCloudFree->data.resize(EXTRASTEP * data.points.size());
 
 		const float invalid = std::numeric_limits<float>::quiet_NaN();
 		const float maxNoise = (float)config.max_noise;
 
-		//Customization
-		const float minDepth = (float)config.min_depth;
-		//Customization
+		const float minDepth = 0.1; //(float)config.min_depth;
 
 		const royale::DepthPoint *itI = &data.points[0];
 
-		//Customization
-		#ifdef PUB_IMAGES
-		//Customization
-		float *itD = nullptr;
-		if (status[DEPTH]){
-		/*float **/itD = (float *)&msgDepth->data[0];
-		}
-		//Customization
-		//Customization
-		float *itN = nullptr;
-		if (status[NOISE]){
-		/*float **/itN = (float *)&msgNoise->data[0];
-		}
-		//Customization
-		//Customization
-		uint16_t *itM = nullptr;
-		if (status[MONO_16]){
-		/*uint16_t **/itM = (uint16_t *)&msgMono16->data[0];
-		}
-		//Customization
-		#endif //PUB_IMAGES
-		//Customization
-
-		//Customization
 		unsigned int extraOffset = 0;
 		unsigned int freeOffset = 0;
-		//Customization
-
-		for(size_t i = 0; i < data.points.size(); ++i, ++itI
-			 //Customization
-			 #ifdef PUB_IMAGES
-			 , ++itD, ++itM, ++itN,
-			 #endif //PUB_IMAGES
-			 //Customization
-			 //Customization
-			 , extraOffset += EXTRASTEP
-			 , freeOffset += EXTRASTEP
-			 //Customization
-			 )
+		unsigned int free_counter = 0;
+		unsigned int noise_counter = 0;
+		// ROS_INFO("H: %i, W: %i", data.height, data.width);
+		for(size_t i = 0; i < data.points.size(); ++i, ++itI, extraOffset += EXTRASTEP, freeOffset += EXTRASTEP)
 		{
-			//Customization
-			#ifdef PUB_CLOUD
-			//Customization
-			float *itCX=nullptr, *itCY=nullptr, *itCZ=nullptr, *itCN=nullptr;
-			uint16_t *itCM=nullptr;
-			if (status[CLOUD]){
-			float *itCX = (float *)&msgCloud->data[i * msgCloud->point_step];
-			float *itCY = itCX + 1;
-			float *itCZ = itCY + 1;
-			float *itCN = itCZ + 1;                    // "noise" field
-			uint16_t *itCM = (uint16_t *)(itCN + 1);   // "intensity" field
-			}
-			//Customization
-			#endif //PUB_CLOUD
-			//Customization
+			unsigned int row = i / data.width;
+			unsigned int col = i % data.width;
+			if(itI->noise < maxNoise && itI->z >= minDepth &&  itI->depthConfidence != 0.0)
+			{
 
-			//Customization
-			#if defined(PUB_CLOUD) || defined(PUB_IMAGES)
-			//Customization
-			if (status[CLOUD]){
-			if(itI->depthConfidence /*&& itI->noise < maxNoise*/
-				//Customization
-				&& itI->z >= minDepth)
-				//Customization
+				memcpy(&msgCloudReduced->data[extraOffset], &itI->x, sizeof(float));
+				memcpy(&msgCloudReduced->data[extraOffset + 4], &itI->y, sizeof(float));
+				memcpy(&msgCloudReduced->data[extraOffset + 8], &itI->z, sizeof(float));
+				memcpy(&msgCloudReduced->data[extraOffset + 12], &itI->grayValue, sizeof(uint16_t));
+			}
+			else if(itI->noise >= maxNoise)
 			{
-				//Customization
-				#ifdef PUB_CLOUD
-				*itCX = itI->x;
-				*itCY = itI->y;
-				*itCZ = itI->z;
-				*itCN = itI->noise;
-				#endif //PUB_CLOUD
-				//Customization
-				//Customization
-				#ifdef PUB_IMAGES
-				//Customization
-				if (status[DEPTH]){
-				*itD = itI->z;
-				}
-				//Customization
-				//Customization
-				if (status[NOISE]){
-				*itN = itI->noise;
-				}
-				//Customization
-				#endif //PUB_IMAGES
-				//Customization
+				noise_counter++;
 			}
-			else
+			else if(itI->depthConfidence == 0.0 || itI->z == 0.0)
 			{
-				//Customization
-				#ifdef PUB_CLOUD
-				*itCX = invalid;
-				*itCY = invalid;
-				*itCZ = invalid;
-				*itCN = 0.0f;
-				#endif //PUB_CLOUD
-				//Customization
-				#ifdef PUB_IMAGES
-				//Customization
-				//Customization
-				if (status[DEPTH]){
-				*itD = 0.0f;
-				}
-				//Customization
-				//Customization
-				if (status[NOISE]){
-				*itN = 0.0f;
-				}
-				//Customization
-				#endif //PUB_IMAGES
-				//Customization
-			}
-			//Customization
-			#ifdef PUB_CLOUD
-			*itCM = itI->grayValue;
-			#endif //PUB_CLOUD
-			//Customization
-			}
-			//Customization
-			#endif //defined(PUB_CLOUD) || defined(PUB_IMAGES)
-			//Customization
-			//Customization
-			#ifdef PUB_IMAGES
-			//Customization
-			if (status[MONO_16]){
-			*itM = itI->grayValue;
-			}
-			//Customization
-			#endif //PUB_IMAGES
-			//Customization
-
-			//Customization
-			if (extraStatus)
-			{
-				if(itI->depthConfidence && itI->noise < maxNoise && itI->z >= minDepth)
+				int crop = 45;
+				if(row < crop && col < crop ||
+					row < crop && col > data.width-crop ||
+					row > data.height-crop && col > data.width-crop ||
+					row > data.height-crop && col < crop)
 				{
-					memcpy(&msgCloudReduced->data[extraOffset], &itI->x, sizeof(float));
-					memcpy(&msgCloudReduced->data[extraOffset + 4], &itI->y, sizeof(float));
-					memcpy(&msgCloudReduced->data[extraOffset + 8], &itI->z, sizeof(float));
+					continue;
 				}
 				else
 				{
-					// ROS_INFO("FREE POINT");;
-					// memcpy(&msgCloudFree->data[freeOffset], &itI->x, sizeof(float));
-					// memcpy(&msgCloudFree->data[freeOffset + 4], &itI->y, sizeof(float));
-					// memcpy(&msgCloudFree->data[freeOffset + 8], &itI->z, sizeof(float));
+					float y = frustum_endpoints_x[row];
+					float x = frustum_endpoints_y[col];
+					float z = frustum_endpoints_z[col];
+					uint16_t g = 0;
+					//ROS_INFO("FREE POINT : %f,%f,%f, ROW/COL = %i,%i",x,y,z, row, col);
+					free_counter++;
+					memcpy(&msgCloudFree->data[freeOffset],      &x, sizeof(float));
+					memcpy(&msgCloudFree->data[freeOffset + 4],  &y, sizeof(float));
+					memcpy(&msgCloudFree->data[freeOffset + 8],  &z, sizeof(float));
+					memcpy(&msgCloudFree->data[freeOffset + 12], &g, sizeof(uint16_t));
 				}
-				memcpy(&msgCloudReduced->data[extraOffset + 12], &itI->grayValue, sizeof(uint16_t));
-			}
-			//Customization
-
-		}
-
-		//Customization
-		#ifdef PUB_IMAGES
-		//Customization
-		if (status[MONO_8] && status[MONO_16] && status[CLOUD]){ //defensively make it safe
-		computeMono8(msgMono16, msgMono8, msgCloud);
-		}
-		//Customization
-		#endif //PUB_IMAGES
-		//Customization
-	}
-
-	void computeMono8(const sensor_msgs::ImageConstPtr &msgMono16, sensor_msgs::ImagePtr &msgMono8, sensor_msgs::PointCloud2Ptr &msgCloud) const
-	{
-		msgMono8->header = msgMono16->header;
-		msgMono8->height = msgMono16->height;
-		msgMono8->width = msgMono16->width;
-		msgMono8->is_bigendian = msgMono16->is_bigendian;
-		msgMono8->encoding = sensor_msgs::image_encodings::MONO8;
-		msgMono8->step = (uint32_t)(sizeof(uint8_t) * msgMono8->width);
-		msgMono8->data.resize(sizeof(uint8_t) * msgMono8->width * msgMono8->height);
-
-		const uint16_t *pMono16 = (const uint16_t *)&msgMono16->data[0];
-		uint8_t *pMono8 = (uint8_t *)&msgMono8->data[0];
-		const size_t size = msgMono8->width * msgMono8->height;
-
-		uint64_t sum = 0;
-		uint64_t count = 0;
-
-		const uint16_t *itI = pMono16;
-		for(size_t i = 0; i < size; ++i, ++itI)
-		{
-			if(*itI)
-			{
-				sum += *itI;
-				++count;
 			}
 		}
-		const double average = (double)sum / (double)count;
-		double deviation = 0;
-
-		itI = pMono16;
-		for(size_t i = 0; i < size; ++i, ++itI)
-		{
-			if(*itI)
-			{
-				const double diff = (double) * itI - average;
-				deviation += (diff * diff);
-			}
-		}
-		deviation = sqrt(deviation / ((double)count - 1.0));
-
-		const uint16_t minV = (uint16_t)std::max(average - config.range_factor * deviation, 0.0);
-		const uint16_t maxV = (uint16_t)(std::min(average + config.range_factor * deviation, 65535.0) - minV);
-		const double maxVF = 255.0 / (double)maxV;
-		uint8_t *itO = pMono8;
-		uint8_t *itP = ((uint8_t *)&msgCloud->data[0]) + 4 * sizeof(float) + sizeof(u_int16_t);   // "gray" field
-		itI = pMono16;
-		for(size_t i = 0; i < size; ++i, ++itI, ++itO, itP += msgCloud->point_step)
-		{
-			uint16_t v = *itI;
-			if(v < minV)
-			{
-				v = 0;
-			}
-			else
-			{
-				v = (uint16_t)(v - minV);
-			}
-			if(v > maxV)
-			{
-				v = maxV;
-			}
-
-			const uint8_t newV = (uint8_t)((double)v * maxVF);
-			*itO = newV;
-			*itP = newV;
-		}
+		// ROS_INFO("FOUND %i FREE POINTS, NOISY POINTS: %i", free_counter, noise_counter);
 	}
 
 	void publish(sensor_msgs::CameraInfoPtr &msgCameraInfo, sensor_msgs::PointCloud2Ptr &msgCloud, 
@@ -1484,50 +1251,12 @@ private:
 			publisher[streamIndex][CAMERA_INFO].publish(msgCameraInfo);
 			msgCameraInfo = sensor_msgs::CameraInfoPtr(new sensor_msgs::CameraInfo);
 		}
-
-		//Customization
-		#ifdef PUB_IMAGES
-		if(status[streamIndex][MONO_8])
-		{
-			publisher[streamIndex][MONO_8].publish(msgMono8);
-			msgMono8 = sensor_msgs::ImagePtr(new sensor_msgs::Image);
-		}
-		if(status[streamIndex][MONO_16])
-		{
-			publisher[streamIndex][MONO_16].publish(msgMono16);
-			msgMono16 = sensor_msgs::ImagePtr(new sensor_msgs::Image);
-		}
-		if(status[streamIndex][DEPTH])
-		{
-			publisher[streamIndex][DEPTH].publish(msgDepth);
-			msgDepth = sensor_msgs::ImagePtr(new sensor_msgs::Image);
-		}
-		if(status[streamIndex][NOISE])
-		{
-			publisher[streamIndex][NOISE].publish(msgNoise);
-			msgNoise = sensor_msgs::ImagePtr(new sensor_msgs::Image);
-		}
-		#endif //PUB_IMAGES
-		//Customization
-
-		//Customization
-		#ifdef PUB_CLOUD
-		if(status[streamIndex][CLOUD])
-		{
-			publisher[streamIndex][CLOUD].publish(msgCloud);
-			msgCloud = sensor_msgs::PointCloud2Ptr(new sensor_msgs::PointCloud2);
-		}
-		#endif //PUB_CLOUD
-		//Customization
-
-		//Customization
-		if (extraStatus){
+		if (pub_status){
 			points_publisher.publish(msgCloudReduced);
 			msgCloudReduced = sensor_msgs::PointCloud2Ptr(new sensor_msgs::PointCloud2);
-			points_publisher.publish(msgCloudFree);
+			free_points_publisher.publish(msgCloudFree);
 			msgCloudFree = sensor_msgs::PointCloud2Ptr(new sensor_msgs::PointCloud2);
 		}
-		//Customization
 
 	}
 
