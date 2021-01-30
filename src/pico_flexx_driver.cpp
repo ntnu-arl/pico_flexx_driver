@@ -630,8 +630,8 @@ private:
 		publisher[1][DEPTH] = nh.advertise<sensor_msgs::Image>(baseName + "/stream2" + PF_TOPIC_DEPTH, queueSize, cb, cb);
 		publisher[1][NOISE] = nh.advertise<sensor_msgs::Image>(baseName + "/stream2" + PF_TOPIC_NOISE, queueSize, cb, cb);
 		publisher[1][CLOUD] = nh.advertise<sensor_msgs::PointCloud2>(baseName + "/stream2" + PF_TOPIC_CLOUD, queueSize, cb, cb);
-		publisher[1][REDUCED] = nh.advertise<sensor_msgs::PointCloud2>(baseName + PF_TOPIC_REDUCED, queueSize, cb, cb);
-		publisher[1][FREE] = nh.advertise<sensor_msgs::PointCloud2>(baseName + PF_TOPIC_FREE, queueSize, cb, cb);
+		publisher[1][REDUCED] = nh.advertise<sensor_msgs::PointCloud2>(baseName + "/stream2"  + PF_TOPIC_REDUCED, queueSize, cb, cb);
+		publisher[1][FREE] = nh.advertise<sensor_msgs::PointCloud2>(baseName + "/stream2"  + PF_TOPIC_FREE, queueSize, cb, cb);
 	}
 
 	bool selectCamera(const std::string &id)
