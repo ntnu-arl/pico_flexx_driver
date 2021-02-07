@@ -4,13 +4,13 @@
   <!-- ID of the sensor that should be used. IDs of all connected devices are listed on startup. -->
   <arg name="sensor"             default=""/>
   <!-- ID of the use case. A list of supported use cases is listed on startup. -->
-  <arg name="use_case"           default="0"/>
+  <arg name="use_case"           default="7"/>
   <!-- Enable or disable automatic expusure. -->
   <arg name="automatic_exposure" default="true"/>
   <!-- Exposure time. Only for manual exposure. -->
   <arg name="exposure_time"      default="1000"/>
   <!-- Maximum allowed noise. Data with higher noise will be filtered out. -->
-  <arg name="max_noise"          default="0.03"/>
+  <arg name="max_noise"          default="0.01"/>
   <!-- Range of the 16-Bit mono image which should be mapped to the 0-255 range of the 8-Bit mono image. The resulting range is `range_factor` times the standard deviation arround mean. -->
   <arg name="range_factor"       default="2.0"/>
   <!-- Queue size for publisher. -->
@@ -28,9 +28,9 @@
   <!-- Whether to start a nodelet manager our not. Disable this if a different nodelet manager should be used. -->
   <arg name="start_manager"      default="true"/>
   <!-- Drop points below -->
-  <arg name="min_depth"      default="0.1"/>
+  <arg name="min_depth"      default="0.25"/>
   <!-- Points in Free Space. -->
-  <arg name="max_depth"      default="4.0"/>
+  <arg name="max_depth"      default="3.0"/>
 
   <!-- Default machine definition. -->
   <machine name="localhost" address="localhost" if="$(arg define_machine)"/>

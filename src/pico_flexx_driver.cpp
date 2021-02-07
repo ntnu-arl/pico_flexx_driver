@@ -306,7 +306,7 @@ public:
 				clientsConnected = clientsConnected || status[i][j];
 			}
 		}
-
+		clientsConnected = true;
 		bool isCapturing(false);
 		cameraDevice->isCapturing(isCapturing);
 		if(clientsConnected && !isCapturing)
@@ -1168,8 +1168,79 @@ private:
 		msgCloud->fields[5].count = 1;
 		msgCloud->data.resize(msgCloud->point_step * data.points.size());
 
-		*msgReduced = *msgCloud;
-		*msgFree = *msgCloud;
+		msgFree->header = header;
+		msgFree->height = data.height;
+		msgFree->width = data.width;
+		msgFree->is_bigendian = false;
+		msgFree->is_dense = false;
+		msgFree->point_step = (uint32_t)(4 * sizeof(float) + sizeof(u_int16_t) + sizeof(u_int8_t));
+		msgFree->row_step = (uint32_t)(msgFree->point_step * data.width);
+		msgFree->fields.resize(6);
+		msgFree->fields[0].name = "x";
+		msgFree->fields[0].offset = 0;
+		msgFree->fields[0].datatype = sensor_msgs::PointField::FLOAT32;
+		msgFree->fields[0].count = 1;
+		msgFree->fields[1].name = "y";
+		msgFree->fields[1].offset = msgFree->fields[0].offset + (uint32_t)sizeof(float);
+		msgFree->fields[1].datatype = sensor_msgs::PointField::FLOAT32;
+		msgFree->fields[1].count = 1;
+		msgFree->fields[2].name = "z";
+		msgFree->fields[2].offset = msgFree->fields[1].offset + (uint32_t)sizeof(float);
+		msgFree->fields[2].datatype = sensor_msgs::PointField::FLOAT32;
+		msgFree->fields[2].count = 1;
+		msgFree->fields[3].name = "noise";
+		msgFree->fields[3].offset = msgFree->fields[2].offset + (uint32_t)sizeof(float);
+		msgFree->fields[3].datatype = sensor_msgs::PointField::FLOAT32;
+		msgFree->fields[3].count = 1;
+		msgFree->fields[4].name = "intensity";
+		msgFree->fields[4].offset = msgFree->fields[3].offset + (uint32_t)sizeof(float);
+		msgFree->fields[4].datatype = sensor_msgs::PointField::UINT16;
+		msgFree->fields[4].count = 1;
+		msgFree->fields[5].name = "gray";
+		msgFree->fields[5].offset = msgFree->fields[4].offset + (uint32_t)sizeof(uint16_t);
+		msgFree->fields[5].datatype = sensor_msgs::PointField::UINT8;
+		msgFree->fields[5].count = 1;
+		msgFree->data.resize(msgFree->point_step * data.points.size());
+
+
+
+		msgReduced->header = header;
+		msgReduced->height = data.height;
+		msgReduced->width = data.width;
+		msgReduced->is_bigendian = false;
+		msgReduced->is_dense = false;
+		msgReduced->point_step = (uint32_t)(4 * sizeof(float) + sizeof(u_int16_t) + sizeof(u_int8_t));
+		msgReduced->row_step = (uint32_t)(msgReduced->point_step * data.width);
+		msgReduced->fields.resize(6);
+		msgReduced->fields[0].name = "x";
+		msgReduced->fields[0].offset = 0;
+		msgReduced->fields[0].datatype = sensor_msgs::PointField::FLOAT32;
+		msgReduced->fields[0].count = 1;
+		msgReduced->fields[1].name = "y";
+		msgReduced->fields[1].offset = msgReduced->fields[0].offset + (uint32_t)sizeof(float);
+		msgReduced->fields[1].datatype = sensor_msgs::PointField::FLOAT32;
+		msgReduced->fields[1].count = 1;
+		msgReduced->fields[2].name = "z";
+		msgReduced->fields[2].offset = msgReduced->fields[1].offset + (uint32_t)sizeof(float);
+		msgReduced->fields[2].datatype = sensor_msgs::PointField::FLOAT32;
+		msgReduced->fields[2].count = 1;
+		msgReduced->fields[3].name = "noise";
+		msgReduced->fields[3].offset = msgReduced->fields[2].offset + (uint32_t)sizeof(float);
+		msgReduced->fields[3].datatype = sensor_msgs::PointField::FLOAT32;
+		msgReduced->fields[3].count = 1;
+		msgReduced->fields[4].name = "intensity";
+		msgReduced->fields[4].offset = msgReduced->fields[3].offset + (uint32_t)sizeof(float);
+		msgReduced->fields[4].datatype = sensor_msgs::PointField::UINT16;
+		msgReduced->fields[4].count = 1;
+		msgReduced->fields[5].name = "gray";
+		msgReduced->fields[5].offset = msgReduced->fields[4].offset + (uint32_t)sizeof(uint16_t);
+		msgReduced->fields[5].datatype = sensor_msgs::PointField::UINT8;
+		msgReduced->fields[5].count = 1;
+		msgReduced->data.resize(msgReduced->point_step * data.points.size());
+
+		// *msgReduced = *msgCloud;
+		// *msgFree = *msgCloud;
+		// msgFree->fields = msgCloud->fields;
 
 		const float invalid = std::numeric_limits<float>::quiet_NaN();
 		const float maxNoise = (float)config.max_noise;
@@ -1204,7 +1275,7 @@ private:
 			float *it_free_noise = it_free_z + 1;                    
 			uint16_t *it_free_intensity = (uint16_t *)(it_free_noise + 1);   
 
-			if(itI->depthConfidence && itI->noise < maxNoise)
+			if(itI->depthConfidence && itI->noise < maxNoise && itI->z > config.min_depth && itI->z < config.max_depth)
 			{
 				*it_cloud_x = itI->x;
 				*it_cloud_y = itI->y;
@@ -1230,7 +1301,7 @@ private:
 			{
 				pixel(0) = i / data.width; // row
 				pixel(1) = i % data.width; // col
-				int crop = 25;
+				int crop = 50;
 				if( (pixel-pixel_tr).norm() > crop &&
 					(pixel-pixel_tl).norm() > crop &&
 					(pixel-pixel_br).norm() > crop &&
@@ -1325,6 +1396,11 @@ private:
 							 sensor_msgs::ImagePtr &msgDepth, sensor_msgs::ImagePtr &msgNoise,
 							 size_t streamIndex = 0) const
 	{
+
+		msgFree->fields = msgCloud->fields;
+		msgReduced->fields = msgCloud->fields;
+		msgFree->header.frame_id = baseNameTF + PF_TF_OPT_FRAME;
+		msgReduced->header.frame_id = baseNameTF + PF_TF_OPT_FRAME;
 		if(status[streamIndex][CAMERA_INFO])
 		{
 			publisher[streamIndex][CAMERA_INFO].publish(msgCameraInfo);
@@ -1386,9 +1462,9 @@ private:
 			processTime = 0;
 			startTime = now;
 			delayReceived = 0;
-			OUT_INFO("processing: " FG_YELLOW "~" << std::setprecision(4) << timePerFrame << " ms." NO_COLOR
-							 " fps: " FG_YELLOW "~" << framesPerSecond << " Hz" NO_COLOR
-							 " delay: " FG_YELLOW "~" << avgDelay << " ms." NO_COLOR);
+			// OUT_INFO("processing: " FG_YELLOW "~" << std::setprecision(4) << timePerFrame << " ms." NO_COLOR
+			// 				 " fps: " FG_YELLOW "~" << framesPerSecond << " Hz" NO_COLOR
+			// 				 " delay: " FG_YELLOW "~" << avgDelay << " ms." NO_COLOR);
 		}
 		++frame;
 	}
