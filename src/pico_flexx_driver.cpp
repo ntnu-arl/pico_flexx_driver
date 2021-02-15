@@ -1250,10 +1250,7 @@ private:
 		uint16_t *it_mono16 = (uint16_t *)&msgMono16->data[0];
 
 		Eigen::Vector2i pixel;
-		const Eigen::Vector2i pixel_tl(0,0);
-		const Eigen::Vector2i pixel_tr(0,H_RES);
-		const Eigen::Vector2i pixel_bl(V_RES,0);
-		const Eigen::Vector2i pixel_br(V_RES,H_RES);
+		const Eigen::Vector2i pixel_center(V_RES/2.0,H_RES/2.0);
 
 		for(size_t i = 0; i < data.points.size(); ++i, ++itI, ++itD, ++it_mono16, ++itN)
 		{
@@ -1297,15 +1294,14 @@ private:
 			{
 				// noise_counter++;
 			}
-			else if(itI->depthConfidence == 0.0 || itI->z >= config.max_depth || itI->z == 0.0)
+			else if(itI->depthConfidence == 0.0 || 
+					(itI->z >= config.max_depth && itI->noise < maxNoise) 
+					|| itI->z == 0.0)
 			{
 				pixel(0) = i / data.width; // row
 				pixel(1) = i % data.width; // col
 				int crop = 50;
-				if( (pixel-pixel_tr).norm() > crop &&
-					(pixel-pixel_tl).norm() > crop &&
-					(pixel-pixel_br).norm() > crop &&
-					(pixel-pixel_bl).norm() > crop)
+				if( (pixel-pixel_center).norm() < crop)
 				{
 					uint16_t g = 0;
 					*it_free_x = frustum_endpoints_y[pixel(1)];
