@@ -16,7 +16,7 @@
 *.dylib
 *.dll
 
-
+royale/libroyale-3.38.0.141-LINUX-arm-64Bit/*
 ## Compiled Static libraries
 #*.lai
 #*.la
