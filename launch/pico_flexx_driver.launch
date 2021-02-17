@@ -10,7 +10,8 @@
   <!-- Exposure time. Only for manual exposure. -->
   <arg name="exposure_time"      default="1000"/>
   <!-- Maximum allowed noise. Data with higher noise will be filtered out. -->
-  <arg name="max_noise"          default="0.005"/>
+  <arg name="max_noise"          default="0.004"/>
+  <arg name="max_free_noise"     default="0.004"/>
   <!-- Range of the 16-Bit mono image which should be mapped to the 0-255 range of the 8-Bit mono image. The resulting range is `range_factor` times the standard deviation arround mean. -->
   <arg name="range_factor"       default="2.0"/>
   <!-- Queue size for publisher. -->
@@ -28,16 +29,16 @@
   <!-- Whether to start a nodelet manager our not. Disable this if a different nodelet manager should be used. -->
   <arg name="start_manager"      default="true"/>
   <!-- Drop points below -->
-  <arg name="min_depth"      default="0.25"/>
+  <arg name="min_depth"      default="0.5"/>
   <!-- Points in Free Space. -->
-  <arg name="max_depth"      default="4.0"/>
+  <arg name="max_depth"      default="3.5"/>
 
   <!-- Default machine definition. -->
   <machine name="localhost" address="localhost" if="$(arg define_machine)"/>
 
   <!-- Static TF publisher. -->
   <node pkg="tf" type="static_transform_publisher" name="$(arg base_name)_static_tf" machine="$(arg machine)" if="$(arg publish_tf)"
-        args="0 0 0 0 0 -1.57079632679489661923 $(arg base_name_tf)_link $(arg base_name_tf)_optical_frame 100" />
+        args="0 0 0 0 0 1.57079632679489661923 $(arg base_name_tf)_test_frame $(arg base_name_tf)_optical_frame 100" />
 
   <!-- Nodelet manager. -->
   <node pkg="nodelet" type="nodelet" name="$(arg nodelet_manager)" args="manager"

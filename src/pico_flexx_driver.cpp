@@ -45,17 +45,16 @@
 #define PF_DEFAULT_NS       "pico_flexx"
 #define PF_TF_OPT_FRAME     "_optical_frame"
 #define PF_TOPIC_INFO       "/camera_info"
-#define PF_TOPIC_MONO8      "/image_mono8"
-#define PF_TOPIC_MONO16     "/image_mono16"
-#define PF_TOPIC_DEPTH      "/image_depth"
-#define PF_TOPIC_NOISE      "/image_noise"
-#define PF_TOPIC_CLOUD      "/points"
-#define PF_TOPIC_REDUCED    "/reduced"
-#define PF_TOPIC_FREE       "/free"
-// Set this to '0' to disable the extended colored output
-#define EXTENDED_OUTPUT 1
+#define PF_TOPIC_IMAGE_MONO8      "/image_mono8"
+#define PF_TOPIC_IMAGE_MONO16     "/image_mono16"
+#define PF_TOPIC_IMAGE_DEPTH      "/image_depth"
+#define PF_TOPIC_IMAGE_NOISE      "/image_noise"
 
-#if EXTENDED_OUTPUT
+#define PF_TOPIC_CLOUD_POINTS      	"/points"
+#define PF_TOPIC_CLOUD_NOISE      	"/noise"
+#define PF_TOPIC_CLOUD_OVER_RANGE   "/over_range"
+#define PF_TOPIC_CLOUD_UNDER_RANGE  "/under_range"
+#define PF_TOPIC_CLOUD_NO_CONF     	"/no_conf"
 
 #define NO_COLOR        "\033[0m"
 #define FG_BLACK        "\033[30m"
@@ -80,30 +79,11 @@
 #define OUT_WARN(msg) OUT_AUX(FG_YELLOW, FG_YELLOW, ROS_WARN_STREAM, msg)
 #define OUT_ERROR(msg) OUT_AUX(FG_RED, FG_RED, ROS_ERROR_STREAM, msg)
 
-#else
-
-#define NO_COLOR        ""
-#define FG_BLACK        ""
-#define FG_RED          ""
-#define FG_GREEN        ""
-#define FG_YELLOW       ""
-#define FG_BLUE         ""
-#define FG_MAGENTA      ""
-#define FG_CYAN         ""
-
-#define OUT_DEBUG(msg) ROS_DEBUG_STREAM(msg)
-#define OUT_INFO(msg) ROS_INFO_STREAM(msg)
-#define OUT_WARN(msg) ROS_WARN_STREAM(msg)
-#define OUT_ERROR(msg) ROS_WARN_STREAM(msg)
-
-#endif
-
 // sensor params
 #define H_FOV_RAD 62.0 * M_PI / 180.0
 #define V_FOV_RAD 45.0 * M_PI / 180.0
 #define H_RES 		224.0
 #define V_RES 		171.0
-
 
 class PicoFlexx : public royale::IDepthDataListener, public royale::IExposureListener2
 {
@@ -111,14 +91,15 @@ private:
 	enum Topics
 	{
 		CAMERA_INFO = 0,
-		MONO_8,
-		MONO_16,
-		DEPTH,
-		NOISE,
-		CLOUD,
-		REDUCED,
-		FREE,
-		COUNT
+		IMAGE_MONO_8,
+		IMAGE_MONO_16,
+		IMAGE_DEPTH,
+		IMAGE_NOISE,
+		CLOUD_POINTS,
+		CLOUD_NOISE,
+		CLOUD_OVER,
+		CLOUD_UNDER,
+		CLOUD_NO_CONF,
 	};
 
 	ros::NodeHandle nh, priv_nh;
@@ -161,13 +142,13 @@ public:
 		framesPerTiming = 25;
 		processTime = 0;
 		delayReceived = 0;
-		int num_sensors =  2;
+		int num_sensors =  1;
 		publisher.resize(num_sensors);
 		status.resize(num_sensors);
 		for(int i = 0; i < num_sensors; ++i)
 		{
-			publisher[i].resize(COUNT);
-			status[i].resize(COUNT, false);
+			publisher[i].resize(10);
+			status[i].resize(10, false);
 		}
 
 
@@ -298,9 +279,9 @@ public:
 	{
 		lockStatus.lock();
 		bool clientsConnected = false;
-		for(size_t i = 0; i < 2; ++i)
+		for(size_t i = 0; i < 1; ++i)
 		{
-			for(size_t j = 0; j < COUNT; ++j)
+			for(size_t j = 0; j < 10; ++j)
 			{
 				status[i][j] = publisher[i][j].getNumSubscribers() > 0;
 				clientsConnected = clientsConnected || status[i][j];
@@ -456,8 +437,14 @@ public:
 		if(level & 0x20)
 		{
 			OUT_INFO("reconfigured max_noise: " << FG_CYAN << config.max_noise << " meters" << NO_COLOR);
+			OUT_INFO("reconfigured max_free_noise: " << FG_CYAN << config.max_free_noise << " meters" << NO_COLOR);
+			OUT_INFO("reconfigured max_depth: " << FG_CYAN << config.max_depth << " meters" << NO_COLOR);
+			OUT_INFO("reconfigured min_depth: " << FG_CYAN << config.min_depth << " meters" << NO_COLOR);
 			lockStatus.lock();
 			this->config.max_noise = config.max_noise;
+			this->config.max_free_noise = config.max_free_noise;
+			this->config.max_depth = config.max_depth;
+			this->config.min_depth = config.min_depth;
 			lockStatus.unlock();
 		}
 
@@ -529,6 +516,7 @@ private:
 		priv_nh.param("exposure_time", exposureTime, 1000);
 		priv_nh.param("exposure_time_stream2", exposureTimeStream2, 1000);
 		priv_nh.param("max_noise", maxNoise, 0.7);
+		priv_nh.param("max_free_noise", maxNoise, 0.7);
 		priv_nh.param("range_factor", rangeFactor, 2.0);
 		priv_nh.param("queue_size", queueSize, 2);
 		priv_nh.param("base_name_tf", baseNameTF, baseName);
@@ -544,6 +532,7 @@ private:
 						 << "             exposure_time: " FG_CYAN << exposureTime << NO_COLOR << std::endl
 						 << "     exposure_time_stream2: " FG_CYAN << exposureTimeStream2 << NO_COLOR << std::endl
 						 << "                 max_noise: " FG_CYAN << maxNoise << " meters" NO_COLOR << std::endl
+						 << "                 max_free_noise: " FG_CYAN << maxNoise << " meters" NO_COLOR << std::endl
 						 << "              range_factor: " FG_CYAN << rangeFactor << NO_COLOR << std::endl
 						 << "                queue_size: " FG_CYAN << queueSize << NO_COLOR << std::endl
 						 << "              base_name_tf: " FG_CYAN << baseNameTF << NO_COLOR
@@ -595,6 +584,7 @@ private:
 		config.exposure_time = std::max(std::min(exposureTime, configMax.exposure_time), configMin.exposure_time);
 		config.exposure_time_stream2 = std::max(std::min(exposureTimeStream2, configMax.exposure_time_stream2), configMin.exposure_time_stream2);
 		config.max_noise = std::max(std::min(maxNoise, configMax.max_noise), configMin.max_noise);
+		config.max_free_noise = std::max(std::min(maxNoise, configMax.max_free_noise), configMin.max_free_noise);
 		config.range_factor = std::max(std::min(rangeFactor, configMax.range_factor), configMin.range_factor);
 		config.min_depth = std::max(std::min(min_depth, configMax.min_depth), configMin.min_depth);
 		config.max_depth = std::max(std::min(max_depth, configMax.max_depth), configMin.max_depth);
@@ -610,28 +600,20 @@ private:
 
 	void setTopics(const std::string &baseName, const int32_t queueSize)
 	{
-		publisher.resize(2);
+		publisher.resize(1);
 		ros::SubscriberStatusCallback cb = boost::bind(&PicoFlexx::callbackTopicStatus, this);
 
-		publisher[0].resize(COUNT);
-		publisher[0][CAMERA_INFO] = nh.advertise<sensor_msgs::CameraInfo>(baseName + PF_TOPIC_INFO, queueSize, cb, cb);
-		publisher[0][MONO_8] = nh.advertise<sensor_msgs::Image>(baseName + PF_TOPIC_MONO8, queueSize, cb, cb);
-		publisher[0][MONO_16] = nh.advertise<sensor_msgs::Image>(baseName + PF_TOPIC_MONO16, queueSize, cb, cb);
-		publisher[0][DEPTH] = nh.advertise<sensor_msgs::Image>(baseName + PF_TOPIC_DEPTH, queueSize, cb, cb);
-		publisher[0][NOISE] = nh.advertise<sensor_msgs::Image>(baseName + PF_TOPIC_NOISE, queueSize, cb, cb);
-		publisher[0][CLOUD] = nh.advertise<sensor_msgs::PointCloud2>(baseName + PF_TOPIC_CLOUD, queueSize, cb, cb);
-		publisher[0][REDUCED] = nh.advertise<sensor_msgs::PointCloud2>(baseName + PF_TOPIC_REDUCED, queueSize, cb, cb);
-		publisher[0][FREE] = nh.advertise<sensor_msgs::PointCloud2>(baseName + PF_TOPIC_FREE, queueSize, cb, cb);
-
-		publisher[1].resize(COUNT);
-		publisher[1][CAMERA_INFO] = nh.advertise<sensor_msgs::CameraInfo>(baseName + "/stream2" + PF_TOPIC_INFO, queueSize, cb, cb);
-		publisher[1][MONO_8] = nh.advertise<sensor_msgs::Image>(baseName + "/stream2" + PF_TOPIC_MONO8, queueSize, cb, cb);
-		publisher[1][MONO_16] = nh.advertise<sensor_msgs::Image>(baseName + "/stream2" + PF_TOPIC_MONO16, queueSize, cb, cb);
-		publisher[1][DEPTH] = nh.advertise<sensor_msgs::Image>(baseName + "/stream2" + PF_TOPIC_DEPTH, queueSize, cb, cb);
-		publisher[1][NOISE] = nh.advertise<sensor_msgs::Image>(baseName + "/stream2" + PF_TOPIC_NOISE, queueSize, cb, cb);
-		publisher[1][CLOUD] = nh.advertise<sensor_msgs::PointCloud2>(baseName + "/stream2" + PF_TOPIC_CLOUD, queueSize, cb, cb);
-		publisher[1][REDUCED] = nh.advertise<sensor_msgs::PointCloud2>(baseName + "/stream2"  + PF_TOPIC_REDUCED, queueSize, cb, cb);
-		publisher[1][FREE] = nh.advertise<sensor_msgs::PointCloud2>(baseName + "/stream2"  + PF_TOPIC_FREE, queueSize, cb, cb);
+		publisher[0].resize(10);
+		publisher[0][CAMERA_INFO] 	= nh.advertise<sensor_msgs::CameraInfo>( baseName + PF_TOPIC_INFO, queueSize, cb, cb);
+		publisher[0][IMAGE_MONO_8] 	= nh.advertise<sensor_msgs::Image>(		 baseName + PF_TOPIC_IMAGE_MONO8, queueSize, cb, cb);
+		publisher[0][IMAGE_MONO_16] = nh.advertise<sensor_msgs::Image>(		 baseName + PF_TOPIC_IMAGE_MONO16, queueSize, cb, cb);
+		publisher[0][IMAGE_DEPTH] 	= nh.advertise<sensor_msgs::Image>(		 baseName + PF_TOPIC_IMAGE_DEPTH, queueSize, cb, cb);
+		publisher[0][IMAGE_NOISE] 	= nh.advertise<sensor_msgs::Image>(		 baseName + PF_TOPIC_IMAGE_NOISE, queueSize, cb, cb);
+		publisher[0][CLOUD_POINTS] 	= nh.advertise<sensor_msgs::PointCloud2>(baseName + PF_TOPIC_CLOUD_POINTS, queueSize, cb, cb);
+		publisher[0][CLOUD_NOISE] 	= nh.advertise<sensor_msgs::PointCloud2>(baseName + PF_TOPIC_CLOUD_NOISE, queueSize, cb, cb);
+		publisher[0][CLOUD_OVER] 	= nh.advertise<sensor_msgs::PointCloud2>(baseName + PF_TOPIC_CLOUD_OVER_RANGE, queueSize, cb, cb);
+		publisher[0][CLOUD_UNDER] 	= nh.advertise<sensor_msgs::PointCloud2>(baseName + PF_TOPIC_CLOUD_UNDER_RANGE, queueSize, cb, cb);
+		publisher[0][CLOUD_NO_CONF] = nh.advertise<sensor_msgs::PointCloud2>(baseName + PF_TOPIC_CLOUD_NO_CONF, queueSize, cb, cb);
 	}
 
 	bool selectCamera(const std::string &id)
@@ -1027,17 +1009,21 @@ private:
 	{
 		std::unique_ptr<royale::DepthData> data;
 		sensor_msgs::CameraInfoPtr msgCameraInfo;
-		sensor_msgs::ImagePtr msgMono8, msgMono16, msgDepth, msgNoise;
-		sensor_msgs::PointCloud2Ptr msgCloud, msgReduced, msgFree;
+		sensor_msgs::ImagePtr msgImageMono8, msgImageMono16, msgImageDepth, msgImageNoise;
+		sensor_msgs::PointCloud2Ptr msgCloudPoints, msgCloudNoise, msgCloudOver, msgCloudUnder, msgCloudNoConf;
 
 		msgCameraInfo = sensor_msgs::CameraInfoPtr(new sensor_msgs::CameraInfo);
-		msgMono8 = sensor_msgs::ImagePtr(new sensor_msgs::Image);
-		msgMono16 = sensor_msgs::ImagePtr(new sensor_msgs::Image);
-		msgDepth = sensor_msgs::ImagePtr(new sensor_msgs::Image);
-		msgNoise = sensor_msgs::ImagePtr(new sensor_msgs::Image);
-		msgCloud = sensor_msgs::PointCloud2Ptr(new sensor_msgs::PointCloud2);
-		msgReduced = sensor_msgs::PointCloud2Ptr(new sensor_msgs::PointCloud2);
-		msgFree = sensor_msgs::PointCloud2Ptr(new sensor_msgs::PointCloud2);
+		msgImageMono8 = sensor_msgs::ImagePtr(new sensor_msgs::Image);
+		msgImageMono16 = sensor_msgs::ImagePtr(new sensor_msgs::Image);
+		msgImageDepth = sensor_msgs::ImagePtr(new sensor_msgs::Image);
+		msgImageNoise = sensor_msgs::ImagePtr(new sensor_msgs::Image);
+
+
+		msgCloudPoints = sensor_msgs::PointCloud2Ptr(new sensor_msgs::PointCloud2);
+		msgCloudNoise = sensor_msgs::PointCloud2Ptr(new sensor_msgs::PointCloud2);
+		msgCloudOver = sensor_msgs::PointCloud2Ptr(new sensor_msgs::PointCloud2);
+		msgCloudUnder = sensor_msgs::PointCloud2Ptr(new sensor_msgs::PointCloud2);
+		msgCloudNoConf = sensor_msgs::PointCloud2Ptr(new sensor_msgs::PointCloud2);
 
 		std::chrono::high_resolution_clock::time_point start, end;
 		std::unique_lock<std::mutex> lock(lockData);
@@ -1057,8 +1043,10 @@ private:
 			size_t streamIndex;
 			if (findStreamIndex(data->streamId, streamIndex))
 			{
-				extractData(*data, msgCameraInfo, msgCloud, msgReduced, msgFree, msgMono8, msgMono16, msgDepth, msgNoise, streamIndex);
-				publish(msgCameraInfo, msgCloud, msgReduced, msgFree, msgMono8, msgMono16, msgDepth, msgNoise, streamIndex);
+				extractData(*data, msgCameraInfo, msgImageMono8, msgImageMono16, msgImageDepth, msgImageNoise,
+						msgCloudPoints, msgCloudNoise, msgCloudOver,msgCloudUnder, msgCloudNoConf, streamIndex);
+				publish(msgCameraInfo, msgImageMono8, msgImageMono16, msgImageDepth, msgImageNoise,
+						msgCloudPoints, msgCloudNoise, msgCloudOver,msgCloudUnder, msgCloudNoConf, streamIndex);
 			}
 			lockStatus.unlock();
 
@@ -1087,10 +1075,51 @@ private:
 		return true;
 	}
 
-	void extractData(const royale::DepthData &data, sensor_msgs::CameraInfoPtr &msgCameraInfo, sensor_msgs::PointCloud2Ptr &msgCloud,
-									sensor_msgs::PointCloud2Ptr &msgReduced,sensor_msgs::PointCloud2Ptr &msgFree,
-									 sensor_msgs::ImagePtr &msgMono8, sensor_msgs::ImagePtr &msgMono16, sensor_msgs::ImagePtr &msgDepth, sensor_msgs::ImagePtr &msgNoise,
-									 size_t streamIndex = 0) const
+	void init_field_msg(const royale::DepthData &data, sensor_msgs::PointCloud2Ptr &msg, std_msgs::Header header)
+	{
+		msg->header = header;
+		msg->height = data.height;
+		msg->width = data.width;
+		msg->is_bigendian = false;
+		msg->is_dense = false;
+		msg->point_step = (uint32_t)(4 * sizeof(float) + sizeof(u_int16_t) + sizeof(u_int8_t));
+		msg->row_step = (uint32_t)(msg->point_step * data.width);
+		msg->fields.resize(6);
+		msg->fields[0].name = "x";
+		msg->fields[0].offset = 0;
+		msg->fields[0].datatype = sensor_msgs::PointField::FLOAT32;
+		msg->fields[0].count = 1;
+		msg->fields[1].name = "y";
+		msg->fields[1].offset = msg->fields[0].offset + (uint32_t)sizeof(float);
+		msg->fields[1].datatype = sensor_msgs::PointField::FLOAT32;
+		msg->fields[1].count = 1;
+		msg->fields[2].name = "z";
+		msg->fields[2].offset = msg->fields[1].offset + (uint32_t)sizeof(float);
+		msg->fields[2].datatype = sensor_msgs::PointField::FLOAT32;
+		msg->fields[2].count = 1;
+		msg->fields[3].name = "noise";
+		msg->fields[3].offset = msg->fields[2].offset + (uint32_t)sizeof(float);
+		msg->fields[3].datatype = sensor_msgs::PointField::FLOAT32;
+		msg->fields[3].count = 1;
+		msg->fields[4].name = "intensity";
+		msg->fields[4].offset = msg->fields[3].offset + (uint32_t)sizeof(float);
+		msg->fields[4].datatype = sensor_msgs::PointField::UINT16;
+		msg->fields[4].count = 1;
+		msg->fields[5].name = "gray";
+		msg->fields[5].offset = msg->fields[4].offset + (uint32_t)sizeof(uint16_t);
+		msg->fields[5].datatype = sensor_msgs::PointField::UINT8;
+		msg->fields[5].count = 1;
+		msg->data.resize(msg->point_step * data.points.size());
+	}
+	
+	
+	void extractData(const royale::DepthData &data, sensor_msgs::CameraInfoPtr &msgCameraInfo, 
+									sensor_msgs::ImagePtr &msgMono8, sensor_msgs::ImagePtr &msgMono16, 
+									sensor_msgs::ImagePtr &msgDepth, sensor_msgs::ImagePtr &msgNoise,
+									sensor_msgs::PointCloud2Ptr &msgCloudPoints,sensor_msgs::PointCloud2Ptr &msgCloudNoise,
+									sensor_msgs::PointCloud2Ptr &msgCloudOver,sensor_msgs::PointCloud2Ptr &msgCloudUnder,
+									sensor_msgs::PointCloud2Ptr &msgCloudNoConf,
+									size_t streamIndex = 0)
 	{
 		std_msgs::Header header;
 		header.frame_id = baseNameTF + PF_TF_OPT_FRAME;
@@ -1104,12 +1133,12 @@ private:
 			msgCameraInfo->height = data.height;
 			msgCameraInfo->width = data.width;
 		}
-
-		if(!(status[streamIndex][MONO_8] || status[streamIndex][MONO_16] || status[streamIndex][DEPTH] || status[streamIndex][NOISE] || status[streamIndex][CLOUD]))
+		if(	!(status[streamIndex][IMAGE_MONO_8] || status[streamIndex][IMAGE_MONO_16] || status[streamIndex][IMAGE_DEPTH] || 
+			  status[streamIndex][IMAGE_NOISE] || status[streamIndex][CLOUD_POINTS] || status[streamIndex][CLOUD_NOISE] || 
+			  status[streamIndex][CLOUD_OVER] || status[streamIndex][CLOUD_UNDER] || status[streamIndex][CLOUD_NO_CONF]))
 		{
 			return;
 		}
-
 		msgMono16->header = header;
 		msgMono16->height = data.height;
 		msgMono16->width = data.width;
@@ -1134,190 +1163,132 @@ private:
 		msgNoise->step = (uint32_t)(sizeof(float) * data.width);
 		msgNoise->data.resize(sizeof(float) * data.points.size());
 
-		msgCloud->header = header;
-		msgCloud->height = data.height;
-		msgCloud->width = data.width;
-		msgCloud->is_bigendian = false;
-		msgCloud->is_dense = false;
-		msgCloud->point_step = (uint32_t)(4 * sizeof(float) + sizeof(u_int16_t) + sizeof(u_int8_t));
-		msgCloud->row_step = (uint32_t)(msgCloud->point_step * data.width);
-		msgCloud->fields.resize(6);
-		msgCloud->fields[0].name = "x";
-		msgCloud->fields[0].offset = 0;
-		msgCloud->fields[0].datatype = sensor_msgs::PointField::FLOAT32;
-		msgCloud->fields[0].count = 1;
-		msgCloud->fields[1].name = "y";
-		msgCloud->fields[1].offset = msgCloud->fields[0].offset + (uint32_t)sizeof(float);
-		msgCloud->fields[1].datatype = sensor_msgs::PointField::FLOAT32;
-		msgCloud->fields[1].count = 1;
-		msgCloud->fields[2].name = "z";
-		msgCloud->fields[2].offset = msgCloud->fields[1].offset + (uint32_t)sizeof(float);
-		msgCloud->fields[2].datatype = sensor_msgs::PointField::FLOAT32;
-		msgCloud->fields[2].count = 1;
-		msgCloud->fields[3].name = "noise";
-		msgCloud->fields[3].offset = msgCloud->fields[2].offset + (uint32_t)sizeof(float);
-		msgCloud->fields[3].datatype = sensor_msgs::PointField::FLOAT32;
-		msgCloud->fields[3].count = 1;
-		msgCloud->fields[4].name = "intensity";
-		msgCloud->fields[4].offset = msgCloud->fields[3].offset + (uint32_t)sizeof(float);
-		msgCloud->fields[4].datatype = sensor_msgs::PointField::UINT16;
-		msgCloud->fields[4].count = 1;
-		msgCloud->fields[5].name = "gray";
-		msgCloud->fields[5].offset = msgCloud->fields[4].offset + (uint32_t)sizeof(uint16_t);
-		msgCloud->fields[5].datatype = sensor_msgs::PointField::UINT8;
-		msgCloud->fields[5].count = 1;
-		msgCloud->data.resize(msgCloud->point_step * data.points.size());
+		init_field_msg(data, msgCloudPoints, header);
+		init_field_msg(data, msgCloudNoise, header);
+		init_field_msg(data, msgCloudOver, header);
+		init_field_msg(data, msgCloudUnder, header);
+		init_field_msg(data, msgCloudNoConf, header);
 
-		msgFree->header = header;
-		msgFree->height = data.height;
-		msgFree->width = data.width;
-		msgFree->is_bigendian = false;
-		msgFree->is_dense = false;
-		msgFree->point_step = (uint32_t)(4 * sizeof(float) + sizeof(u_int16_t) + sizeof(u_int8_t));
-		msgFree->row_step = (uint32_t)(msgFree->point_step * data.width);
-		msgFree->fields.resize(6);
-		msgFree->fields[0].name = "x";
-		msgFree->fields[0].offset = 0;
-		msgFree->fields[0].datatype = sensor_msgs::PointField::FLOAT32;
-		msgFree->fields[0].count = 1;
-		msgFree->fields[1].name = "y";
-		msgFree->fields[1].offset = msgFree->fields[0].offset + (uint32_t)sizeof(float);
-		msgFree->fields[1].datatype = sensor_msgs::PointField::FLOAT32;
-		msgFree->fields[1].count = 1;
-		msgFree->fields[2].name = "z";
-		msgFree->fields[2].offset = msgFree->fields[1].offset + (uint32_t)sizeof(float);
-		msgFree->fields[2].datatype = sensor_msgs::PointField::FLOAT32;
-		msgFree->fields[2].count = 1;
-		msgFree->fields[3].name = "noise";
-		msgFree->fields[3].offset = msgFree->fields[2].offset + (uint32_t)sizeof(float);
-		msgFree->fields[3].datatype = sensor_msgs::PointField::FLOAT32;
-		msgFree->fields[3].count = 1;
-		msgFree->fields[4].name = "intensity";
-		msgFree->fields[4].offset = msgFree->fields[3].offset + (uint32_t)sizeof(float);
-		msgFree->fields[4].datatype = sensor_msgs::PointField::UINT16;
-		msgFree->fields[4].count = 1;
-		msgFree->fields[5].name = "gray";
-		msgFree->fields[5].offset = msgFree->fields[4].offset + (uint32_t)sizeof(uint16_t);
-		msgFree->fields[5].datatype = sensor_msgs::PointField::UINT8;
-		msgFree->fields[5].count = 1;
-		msgFree->data.resize(msgFree->point_step * data.points.size());
-
-
-
-		msgReduced->header = header;
-		msgReduced->height = data.height;
-		msgReduced->width = data.width;
-		msgReduced->is_bigendian = false;
-		msgReduced->is_dense = false;
-		msgReduced->point_step = (uint32_t)(4 * sizeof(float) + sizeof(u_int16_t) + sizeof(u_int8_t));
-		msgReduced->row_step = (uint32_t)(msgReduced->point_step * data.width);
-		msgReduced->fields.resize(6);
-		msgReduced->fields[0].name = "x";
-		msgReduced->fields[0].offset = 0;
-		msgReduced->fields[0].datatype = sensor_msgs::PointField::FLOAT32;
-		msgReduced->fields[0].count = 1;
-		msgReduced->fields[1].name = "y";
-		msgReduced->fields[1].offset = msgReduced->fields[0].offset + (uint32_t)sizeof(float);
-		msgReduced->fields[1].datatype = sensor_msgs::PointField::FLOAT32;
-		msgReduced->fields[1].count = 1;
-		msgReduced->fields[2].name = "z";
-		msgReduced->fields[2].offset = msgReduced->fields[1].offset + (uint32_t)sizeof(float);
-		msgReduced->fields[2].datatype = sensor_msgs::PointField::FLOAT32;
-		msgReduced->fields[2].count = 1;
-		msgReduced->fields[3].name = "noise";
-		msgReduced->fields[3].offset = msgReduced->fields[2].offset + (uint32_t)sizeof(float);
-		msgReduced->fields[3].datatype = sensor_msgs::PointField::FLOAT32;
-		msgReduced->fields[3].count = 1;
-		msgReduced->fields[4].name = "intensity";
-		msgReduced->fields[4].offset = msgReduced->fields[3].offset + (uint32_t)sizeof(float);
-		msgReduced->fields[4].datatype = sensor_msgs::PointField::UINT16;
-		msgReduced->fields[4].count = 1;
-		msgReduced->fields[5].name = "gray";
-		msgReduced->fields[5].offset = msgReduced->fields[4].offset + (uint32_t)sizeof(uint16_t);
-		msgReduced->fields[5].datatype = sensor_msgs::PointField::UINT8;
-		msgReduced->fields[5].count = 1;
-		msgReduced->data.resize(msgReduced->point_step * data.points.size());
-
-		// *msgReduced = *msgCloud;
-		// *msgFree = *msgCloud;
-		// msgFree->fields = msgCloud->fields;
-
-		const float invalid = std::numeric_limits<float>::quiet_NaN();
-		const float maxNoise = (float)config.max_noise;
-		const royale::DepthPoint *itI = &data.points[0];
-		float *itD = (float *)&msgDepth->data[0];
-		float *itN = (float *)&msgNoise->data[0];
-		uint16_t *it_mono16 = (uint16_t *)&msgMono16->data[0];
+		const royale::DepthPoint *it_data 	= &data.points[0];
+		float *it_img_depth 						= (float *)&msgDepth->data[0];
+		float *it_img_noise 						= (float *)&msgNoise->data[0];
+		uint16_t *it_img_mono_16 			= (uint16_t *)&msgMono16->data[0];
 
 		Eigen::Vector2i pixel;
 		const Eigen::Vector2i pixel_center(V_RES/2.0,H_RES/2.0);
 
-		for(size_t i = 0; i < data.points.size(); ++i, ++itI, ++itD, ++it_mono16, ++itN)
+		const float maxNoise = (float)config.max_noise;
+		const float maxFreeNoise = (float)config.max_free_noise;
+
+		for(size_t i = 0; i < data.points.size(); ++i, ++it_data, ++it_img_depth, ++it_img_mono_16, ++it_img_noise)
 		{
-			float *it_cloud_x = (float *)&msgCloud->data[i * msgCloud->point_step];
-			float *it_cloud_y = it_cloud_x + 1;
-			float *it_cloud_z = it_cloud_y + 1;
-			float *it_cloud_noise = it_cloud_z + 1;                    
-			uint16_t *it_cloud_intensity = (uint16_t *)(it_cloud_noise + 1);   
+			float *it_cloud_points_x = (float *)&msgCloudPoints->data[i * msgCloudPoints->point_step];
+			float *it_cloud_points_y = it_cloud_points_x + 1;
+			float *it_cloud_points_z = it_cloud_points_y + 1;
+			float *it_cloud_points_noise = it_cloud_points_z + 1;                    
+			uint16_t *it_cloud_points_intensity = (uint16_t *)(it_cloud_points_noise + 1);   
 
-			float *it_reduced_x = (float *)&msgReduced->data[i * msgReduced->point_step];
-			float *it_reduced_y = it_reduced_x + 1;
-			float *it_reduced_z = it_reduced_y + 1;
-			float *it_reduced_noise = it_reduced_z + 1;                    
-			uint16_t *it_reduced_intensity = (uint16_t *)(it_reduced_noise + 1); 
+			float *it_cloud_noise_x = (float *)&msgCloudNoise->data[i * msgCloudNoise->point_step];
+			float *it_cloud_noise_y = it_cloud_noise_x + 1;
+			float *it_cloud_noise_z = it_cloud_noise_y + 1;
+			float *it_cloud_noise_noise = it_cloud_noise_z + 1;                    
+			uint16_t *it_cloud_noise_intensity = (uint16_t *)(it_cloud_noise_noise + 1); 
 
-			float *it_free_x = (float *)&msgFree->data[i * msgFree->point_step];
-			float *it_free_y = it_free_x + 1;
-			float *it_free_z = it_free_y + 1;
-			float *it_free_noise = it_free_z + 1;                    
-			uint16_t *it_free_intensity = (uint16_t *)(it_free_noise + 1);   
+			float *it_cloud_over_x = (float *)&msgCloudOver->data[i * msgCloudOver->point_step];
+			float *it_cloud_over_y = it_cloud_over_x + 1;
+			float *it_cloud_over_z = it_cloud_over_y + 1;
+			float *it_cloud_over_noise = it_cloud_over_z + 1;                    
+			uint16_t *it_cloud_over_intensity = (uint16_t *)(it_cloud_over_noise + 1);   
 
-			if(itI->depthConfidence && itI->noise < maxNoise && itI->z > config.min_depth && itI->z < config.max_depth)
+			float *it_cloud_under_x = (float *)&msgCloudUnder->data[i * msgCloudUnder->point_step];
+			float *it_cloud_under_y = it_cloud_under_x + 1;
+			float *it_cloud_under_z = it_cloud_under_y + 1;
+			float *it_cloud_under_noise = it_cloud_under_z + 1;                    
+			uint16_t *it_cloud_under_intensity = (uint16_t *)(it_cloud_under_noise + 1);   
+
+			float *it_cloud_no_conf_x = (float *)&msgCloudNoConf->data[i * msgCloudNoConf->point_step];
+			float *it_cloud_no_conf_y = it_cloud_no_conf_x + 1;
+			float *it_cloud_no_conf_z = it_cloud_no_conf_y + 1;
+			float *it_cloud_no_conf_noise = it_cloud_no_conf_z + 1;                    
+			uint16_t *it_cloud_no_conf_intensity = (uint16_t *)(it_cloud_no_conf_noise + 1);   
+
+			if(it_data->depthConfidence > 0.0 && 
+			it_data->z < (float)config.max_depth && it_data->z > (float)config.min_depth && 
+			it_data->noise < maxNoise)
 			{
-				*it_cloud_x = itI->x;
-				*it_cloud_y = itI->y;
-				*it_cloud_z = itI->z;
-				*it_cloud_noise = itI->noise;
-				*it_cloud_intensity = itI->grayValue;
-				*itD = itI->z;
-				*itN = itI->noise;
-				if(itI->z > config.min_depth && itI->z < config.max_depth)
-				{				
-					*it_reduced_x = itI->x;
-					*it_reduced_y = itI->y;
-					*it_reduced_z = itI->z;
-					*it_reduced_noise = itI->noise;
-					*it_reduced_intensity = itI->grayValue;
-				}
+				*it_cloud_points_x = it_data->x;
+				*it_cloud_points_y = it_data->y;
+				*it_cloud_points_z = it_data->z;
+				*it_cloud_points_noise = it_data->noise;
+				*it_cloud_points_intensity = it_data->grayValue;
+				*it_img_depth = it_data->z;
+				*it_img_noise = it_data->noise;
 			}
-			else if(itI->noise >= maxNoise)
+			if(it_data->noise >= maxNoise)
 			{
-				// noise_counter++;
+				*it_cloud_noise_x = it_data->x;
+				*it_cloud_noise_y = it_data->y;
+				*it_cloud_noise_z = config.max_depth; //it_data->z;
+				*it_cloud_noise_noise = it_data->noise;                    
+				*it_cloud_noise_intensity = it_data->grayValue; 
 			}
-			else if(itI->depthConfidence == 0.0 || 
-					(itI->z >= config.max_depth && itI->noise < maxNoise) 
-					|| itI->z == 0.0)
+			if(it_data->z > (float)config.max_depth && it_data->noise < maxFreeNoise)
 			{
-				pixel(0) = i / data.width; // row
-				pixel(1) = i % data.width; // col
-				int crop = 50;
-				if( (pixel-pixel_center).norm() < crop)
-				{
-					uint16_t g = 0;
-					*it_free_x = frustum_endpoints_y[pixel(1)];
-					*it_free_y = frustum_endpoints_x[pixel(0)];
-					*it_free_z = frustum_endpoints_z[pixel(1)];
-					*it_free_noise = itI->noise;
-					*it_free_intensity = itI->grayValue;
-				}
+				float x = it_data->x;
+				float y = it_data->y;
+				float z = it_data->z;
+
+				Eigen::Vector3d vect(x,y,z);
+				vect /= vect.norm();
+				vect *= config.max_depth;
+
+				*it_cloud_over_x = vect(0);
+				*it_cloud_over_y = vect(1);
+				*it_cloud_over_z = vect(2);
+				*it_cloud_over_noise = it_data->noise;                    
+				*it_cloud_over_intensity = it_data->grayValue; 
 			}
-			*it_cloud_intensity = itI->grayValue;
-			*it_mono16 = itI->grayValue;
+			if(it_data->z < (float)config.min_depth)
+			{
+				*it_cloud_under_x = it_data->x;
+				*it_cloud_under_y = it_data->y;
+				*it_cloud_under_z = config.max_depth; //it_data->z;
+				*it_cloud_under_noise = it_data->noise;                    
+				*it_cloud_under_intensity = it_data->grayValue; 
+			}
+			if(it_data->depthConfidence == 0.0)
+			{
+				*it_cloud_no_conf_x = it_data->x;
+				*it_cloud_no_conf_y = it_data->y;
+				*it_cloud_no_conf_z = config.max_depth; //it_data->z;
+				*it_cloud_no_conf_noise = it_data->noise;                    
+				*it_cloud_no_conf_intensity = it_data->grayValue; 
+			}
+			// else if(itI->noise >= maxNoise)
+			// {
+			// 	// noise_counter++;
+			// }
+			// else if(itI->depthConfidence == 0.0 || 
+			// 		(itI->z >= config.max_depth && itI->noise < maxNoise) 
+			// 		|| itI->z == 0.0)
+			// {
+			// 	pixel(0) = i / data.width; // row
+			// 	pixel(1) = i % data.width; // col
+			// 	int crop = 50;
+			// 	if( (pixel-pixel_center).norm() < crop)
+			// 	{
+			// 		*it_free_x = frustum_endpoints_y[pixel(1)];
+			// 		*it_free_y = frustum_endpoints_x[pixel(0)];
+			// 		*it_free_z = frustum_endpoints_z[pixel(1)];
+			// 		*it_free_noise = itI->noise;
+			// 		*it_free_intensity = itI->grayValue;
+			// 	}
+			// }
+			*it_img_mono_16 = it_data->grayValue;
 		}
 
-		computeMono8(msgMono16, msgMono8, msgCloud);
+		computeMono8(msgMono16, msgMono8, msgCloudPoints);
 	}
-
 	void computeMono8(const sensor_msgs::ImageConstPtr &msgMono16, sensor_msgs::ImagePtr &msgMono8, sensor_msgs::PointCloud2Ptr &msgCloud) const
 	{
 		msgMono8->header = msgMono16->header;
@@ -1386,56 +1357,68 @@ private:
 		}
 	}
 
-	void publish(sensor_msgs::CameraInfoPtr &msgCameraInfo, sensor_msgs::PointCloud2Ptr &msgCloud,
-							sensor_msgs::PointCloud2Ptr &msgReduced,sensor_msgs::PointCloud2Ptr &msgFree,
-							 sensor_msgs::ImagePtr &msgMono8, sensor_msgs::ImagePtr &msgMono16,
-							 sensor_msgs::ImagePtr &msgDepth, sensor_msgs::ImagePtr &msgNoise,
-							 size_t streamIndex = 0) const
+	void publish(sensor_msgs::CameraInfoPtr &msgCameraInfo, 
+									sensor_msgs::ImagePtr &msgMono8, sensor_msgs::ImagePtr &msgMono16, 
+									sensor_msgs::ImagePtr &msgDepth, sensor_msgs::ImagePtr &msgNoise,
+									sensor_msgs::PointCloud2Ptr &msgCloudPoints,sensor_msgs::PointCloud2Ptr &msgCloudNoise,
+									sensor_msgs::PointCloud2Ptr &msgCloudOver,sensor_msgs::PointCloud2Ptr &msgCloudUnder,
+									sensor_msgs::PointCloud2Ptr &msgCloudNoConf,
+									size_t streamIndex = 0) const
 	{
 
-		msgFree->fields = msgCloud->fields;
-		msgReduced->fields = msgCloud->fields;
-		msgFree->header.frame_id = baseNameTF + PF_TF_OPT_FRAME;
-		msgReduced->header.frame_id = baseNameTF + PF_TF_OPT_FRAME;
+		msgCloudNoise->fields = msgCloudPoints->fields;
+		msgCloudNoise->header.frame_id = baseNameTF + PF_TF_OPT_FRAME;
+		msgCloudOver->fields = msgCloudPoints->fields;
+		msgCloudOver->header.frame_id = baseNameTF + PF_TF_OPT_FRAME;
+		msgCloudUnder->fields = msgCloudPoints->fields;
+		msgCloudUnder->header.frame_id = baseNameTF + PF_TF_OPT_FRAME;
+		msgCloudNoConf->fields = msgCloudPoints->fields;
+		msgCloudNoConf->header.frame_id = baseNameTF + PF_TF_OPT_FRAME;
+
 		if(status[streamIndex][CAMERA_INFO])
 		{
 			publisher[streamIndex][CAMERA_INFO].publish(msgCameraInfo);
 			msgCameraInfo = sensor_msgs::CameraInfoPtr(new sensor_msgs::CameraInfo);
 		}
-		if(status[streamIndex][MONO_8])
+		if(status[streamIndex][IMAGE_MONO_8])
 		{
-			publisher[streamIndex][MONO_8].publish(msgMono8);
+			publisher[streamIndex][IMAGE_MONO_8].publish(msgMono8);
 			msgMono8 = sensor_msgs::ImagePtr(new sensor_msgs::Image);
 		}
-		if(status[streamIndex][MONO_16])
+		if(status[streamIndex][IMAGE_MONO_16])
 		{
-			publisher[streamIndex][MONO_16].publish(msgMono16);
+			publisher[streamIndex][IMAGE_MONO_16].publish(msgMono16);
 			msgMono16 = sensor_msgs::ImagePtr(new sensor_msgs::Image);
 		}
-		if(status[streamIndex][DEPTH])
+		if(status[streamIndex][IMAGE_DEPTH])
 		{
-			publisher[streamIndex][DEPTH].publish(msgDepth);
+			publisher[streamIndex][IMAGE_DEPTH].publish(msgDepth);
 			msgDepth = sensor_msgs::ImagePtr(new sensor_msgs::Image);
 		}
-		if(status[streamIndex][NOISE])
+		if(status[streamIndex][CLOUD_POINTS])
 		{
-			publisher[streamIndex][NOISE].publish(msgNoise);
-			msgNoise = sensor_msgs::ImagePtr(new sensor_msgs::Image);
+			publisher[streamIndex][CLOUD_POINTS].publish(msgCloudPoints);
+			msgCloudPoints = sensor_msgs::PointCloud2Ptr(new sensor_msgs::PointCloud2);
 		}
-		if(status[streamIndex][CLOUD])
+		if(status[streamIndex][CLOUD_NOISE])
 		{
-			publisher[streamIndex][CLOUD].publish(msgCloud);
-			msgCloud = sensor_msgs::PointCloud2Ptr(new sensor_msgs::PointCloud2);
+			publisher[streamIndex][CLOUD_NOISE].publish(msgCloudNoise);
+			msgCloudNoise = sensor_msgs::PointCloud2Ptr(new sensor_msgs::PointCloud2);
 		}
-		if(status[streamIndex][REDUCED])
+		if(status[streamIndex][CLOUD_OVER])
 		{
-			publisher[streamIndex][REDUCED].publish(msgReduced);
-			msgReduced = sensor_msgs::PointCloud2Ptr(new sensor_msgs::PointCloud2);
+			publisher[streamIndex][CLOUD_OVER].publish(msgCloudOver);
+			msgCloudOver = sensor_msgs::PointCloud2Ptr(new sensor_msgs::PointCloud2);
 		}
-		if(status[streamIndex][FREE])
+		if(status[streamIndex][CLOUD_UNDER])
 		{
-			publisher[streamIndex][FREE].publish(msgFree);
-			msgFree = sensor_msgs::PointCloud2Ptr(new sensor_msgs::PointCloud2);
+			publisher[streamIndex][CLOUD_UNDER].publish(msgCloudUnder);
+			msgCloudUnder = sensor_msgs::PointCloud2Ptr(new sensor_msgs::PointCloud2);
+		}
+		if(status[streamIndex][CLOUD_NO_CONF])
+		{
+			publisher[streamIndex][CLOUD_NO_CONF].publish(msgCloudNoConf);
+			msgCloudNoConf = sensor_msgs::PointCloud2Ptr(new sensor_msgs::PointCloud2);
 		}
 	}
 
@@ -1449,11 +1432,11 @@ private:
 		}
 		else if(frame % framesPerTiming == 0)
 		{
-			double timePerFrame, framesPerSecond, avgDelay;
+			// double timePerFrame, framesPerSecond, avgDelay;
 
-			timePerFrame = ((double)processTime / framesPerTiming) / 1000000.0;
-			framesPerSecond = (double)framesPerTiming / ((double)(now - startTime).count() / 1000000000.0);
-			avgDelay = ((double)delayReceived / (double)framesPerTiming) / 1000000.0;
+			// timePerFrame = ((double)processTime / framesPerTiming) / 1000000.0;
+			// framesPerSecond = (double)framesPerTiming / ((double)(now - startTime).count() / 1000000000.0);
+			// avgDelay = ((double)delayReceived / (double)framesPerTiming) / 1000000.0;
 
 			processTime = 0;
 			startTime = now;
