@@ -515,8 +515,8 @@ private:
 		priv_nh.param("automatic_exposure", automaticExposureStream2, true);
 		priv_nh.param("exposure_time", exposureTime, 1000);
 		priv_nh.param("exposure_time_stream2", exposureTimeStream2, 1000);
-		priv_nh.param("max_noise", maxNoise, 0.7);
-		priv_nh.param("max_free_noise", maxNoise, 0.7);
+		// priv_nh.param("max_noise", maxNoise, 0.7);
+		// priv_nh.param("max_free_noise", maxNoise, 0.7);
 		priv_nh.param("range_factor", rangeFactor, 2.0);
 		priv_nh.param("queue_size", queueSize, 2);
 		priv_nh.param("base_name_tf", baseNameTF, baseName);
@@ -583,8 +583,8 @@ private:
 		config.exposure_mode_stream2 = automaticExposureStream2 ? 1 : 0;
 		config.exposure_time = std::max(std::min(exposureTime, configMax.exposure_time), configMin.exposure_time);
 		config.exposure_time_stream2 = std::max(std::min(exposureTimeStream2, configMax.exposure_time_stream2), configMin.exposure_time_stream2);
-		config.max_noise = std::max(std::min(maxNoise, configMax.max_noise), configMin.max_noise);
-		config.max_free_noise = std::max(std::min(maxNoise, configMax.max_free_noise), configMin.max_free_noise);
+		config.max_noise = std::max(std::min(0.015, configMax.max_noise), configMin.max_noise);
+		config.max_free_noise = std::max(std::min(0.06, configMax.max_free_noise), configMin.max_free_noise);
 		config.range_factor = std::max(std::min(rangeFactor, configMax.range_factor), configMin.range_factor);
 		config.min_depth = std::max(std::min(min_depth, configMax.min_depth), configMin.min_depth);
 		config.max_depth = std::max(std::min(max_depth, configMax.max_depth), configMin.max_depth);
@@ -1177,8 +1177,8 @@ private:
 		Eigen::Vector2i pixel;
 		const Eigen::Vector2i pixel_center(V_RES/2.0,H_RES/2.0);
 
-		const float maxNoise = (float)config.max_noise;
-		const float maxFreeNoise = (float)config.max_free_noise;
+		const float maxNoise = 0.015;//(float)config.max_noise;
+		const float maxFreeNoise = 0.06;//(float)config.max_free_noise;
 
 		for(size_t i = 0; i < data.points.size(); ++i, ++it_data, ++it_img_depth, ++it_img_mono_16, ++it_img_noise)
 		{
