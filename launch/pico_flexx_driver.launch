@@ -10,12 +10,12 @@
   <!-- Exposure time. Only for manual exposure. -->
   <arg name="exposure_time"      default="1000"/>
   <!-- Maximum allowed noise. Data with higher noise will be filtered out. -->
-  <arg name="max_noise"          default="0.015"/>
-  <arg name="max_free_noise"     default="0.004"/>
+  <arg name="max_noise"          default="0.5"/>
+  <arg name="max_free_noise"     default="0.5"/>
   <!-- Range of the 16-Bit mono image which should be mapped to the 0-255 range of the 8-Bit mono image. The resulting range is `range_factor` times the standard deviation arround mean. -->
   <arg name="range_factor"       default="2.0"/>
   <!-- Queue size for publisher. -->
-  <arg name="queue_size"         default="5"/>
+  <arg name="queue_size"         default="10"/>
   <!-- Publish a static TF transform for the optical frame of the camera. -->
   <arg name="publish_tf"         default="false" />
   <!-- Base name of the tf frames. -->
@@ -29,16 +29,16 @@
   <!-- Whether to start a nodelet manager our not. Disable this if a different nodelet manager should be used. -->
   <arg name="start_manager"      default="true"/>
   <!-- Drop points below -->
-  <arg name="min_depth"      default="0.5"/>
+  <arg name="min_depth"      default="0.1"/>
   <!-- Points in Free Space. -->
-  <arg name="max_depth"      default="3.5"/>
+  <arg name="max_depth"      default="4.5"/>
 
   <!-- Default machine definition. -->
   <machine name="localhost" address="localhost" if="$(arg define_machine)"/>
 
   <!-- Static TF publisher. -->
-  <node pkg="tf" type="static_transform_publisher" name="$(arg base_name)_static_tf" machine="$(arg machine)" if="$(arg publish_tf)"
-        args="0 0 0 0 0 1.57079632679489661923 $(arg base_name_tf)_test_frame $(arg base_name_tf)_optical_frame 100" />
+  <node pkg="tf" type="static_transform_publisher" name="test_frame_static_tf" machine="$(arg machine)"
+        args="0 0 0 0 0 1.57079632679489661923 test_frame $(arg base_name_tf)_optical_frame 100" />
 
   <!-- Nodelet manager. -->
   <node pkg="nodelet" type="nodelet" name="$(arg nodelet_manager)" args="manager"
@@ -54,10 +54,63 @@
     <param name="automatic_exposure" type="bool"   value="$(arg automatic_exposure)"/>
     <param name="exposure_time"      type="int"    value="$(arg exposure_time)"/>
     <param name="max_noise"          type="double" value="$(arg max_noise)"/>
+    <param name="max_free_noise"     type="double" value="$(arg max_free_noise)"/>
     <param name="range_factor"       type="double" value="$(arg range_factor)"/>
     <param name="queue_size"         type="int"    value="$(arg queue_size)"/>
     <param name="base_name_tf"       type="str"    value="$(arg base_name_tf)"/>
     <param name="min_depth"         type="double"     value="$(arg min_depth)"/>
     <param name="max_depth"         type="double"     value="$(arg max_depth)"/>
   </node>
+
+  <node name="pico_flexx_throttle" type="throttle" pkg="topic_tools" args="messages /pico_flexx/points 3 /pico_flexx/points_throttled" />
+
+  <!-- Nodelet manager. -->
+  <node pkg="nodelet" type="nodelet" name="cloud_nodelet" args="manager"
+        if="$(arg start_manager)" machine="$(arg machine)" output="screen"/>
+
+  <node pkg="nodelet" type="nodelet" name="VoxelGrid" args="load pcl/VoxelGrid cloud_nodelet" output="screen">
+    <remap from="~input" to="/pico_flexx/points_throttled" />
+    <remap from="~output" to="/pico_flexx/points_throttled_voxeled" />
+    <rosparam>
+      leaf_size: 0.015
+      filter_field_name: z
+      filter_limit_min: 0.0
+      filter_limit_max: 10.0
+      filter_limit_negative: false
+    </rosparam>
+  </node>
+
+  <node pkg="nodelet" type="nodelet" name="StatisticalOutlierRemoval" args="load pcl/StatisticalOutlierRemoval cloud_nodelet" output="screen">
+    <remap from="~input" to="/pico_flexx/points_throttled_voxeled" />
+    <remap from="~output" to="/pico_flexx/points_throttled_voxeled_filtered" />
+    <rosparam>
+      mean_k: 30
+      stddev: 0.55
+      negative: false
+    </rosparam>
+  </node>
+
+  <node name="pico_flexx_over_throttle" type="throttle" pkg="topic_tools" args="messages /pico_flexx/over_range 3 /pico_flexx/over_range_throttled" />
+  <node pkg="nodelet" type="nodelet" name="VoxelGrid_over" args="load pcl/VoxelGrid cloud_nodelet" output="screen">
+    <remap from="~input" to="/pico_flexx/over_range_throttled" />
+    <remap from="~output" to="/pico_flexx/over_range_throttled_voxeled" />
+    <rosparam>
+      leaf_size: 0.015
+      filter_field_name: z
+      filter_limit_min: 0.0
+      filter_limit_max: 10.0
+      filter_limit_negative: false
+    </rosparam>
+  </node>
+
+  <node pkg="nodelet" type="nodelet" name="StatisticalOutlierRemoval_over" args="load pcl/StatisticalOutlierRemoval cloud_nodelet" output="screen">
+    <remap from="~input" to="/pico_flexx/over_range_throttled_voxeled" />
+    <remap from="~output" to="/pico_flexx/over_range_throttled_voxeled_filtered" />
+    <rosparam>
+      mean_k: 30
+      stddev: 0.55
+      negative: false
+    </rosparam>
+  </node>
+
 </launch>

@@ -505,7 +505,7 @@ private:
 		bool automaticExposure, automaticExposureStream2;
 		int32_t useCase, exposureTime, exposureTimeStream2, queueSize;
 		std::string sensor, baseName;
-		double maxNoise, rangeFactor;
+		double maxNoise, maxFreeNoise, rangeFactor;
 		double min_depth, max_depth;
 
 		priv_nh.param("base_name", baseName, std::string(PF_DEFAULT_NS));
@@ -515,13 +515,13 @@ private:
 		priv_nh.param("automatic_exposure", automaticExposureStream2, true);
 		priv_nh.param("exposure_time", exposureTime, 1000);
 		priv_nh.param("exposure_time_stream2", exposureTimeStream2, 1000);
-		// priv_nh.param("max_noise", maxNoise, 0.7);
-		// priv_nh.param("max_free_noise", maxNoise, 0.7);
+		priv_nh.param("max_noise", maxNoise, 0.7);
+		priv_nh.param("max_free_noise", maxFreeNoise, 0.7);
 		priv_nh.param("range_factor", rangeFactor, 2.0);
 		priv_nh.param("queue_size", queueSize, 2);
 		priv_nh.param("base_name_tf", baseNameTF, baseName);
 		priv_nh.param("min_depth", min_depth, 0.1);
-		priv_nh.param("max_depth", max_depth, 4.0);
+		priv_nh.param("max_depth", max_depth, 4.5);
 
 		OUT_INFO("parameter:" << std::endl
 						 << "                 base_name: " FG_CYAN << baseName << NO_COLOR << std::endl
@@ -532,7 +532,7 @@ private:
 						 << "             exposure_time: " FG_CYAN << exposureTime << NO_COLOR << std::endl
 						 << "     exposure_time_stream2: " FG_CYAN << exposureTimeStream2 << NO_COLOR << std::endl
 						 << "                 max_noise: " FG_CYAN << maxNoise << " meters" NO_COLOR << std::endl
-						 << "                 max_free_noise: " FG_CYAN << maxNoise << " meters" NO_COLOR << std::endl
+						 << "                 max_free_noise: " FG_CYAN << maxFreeNoise << " meters" NO_COLOR << std::endl
 						 << "              range_factor: " FG_CYAN << rangeFactor << NO_COLOR << std::endl
 						 << "                queue_size: " FG_CYAN << queueSize << NO_COLOR << std::endl
 						 << "              base_name_tf: " FG_CYAN << baseNameTF << NO_COLOR
@@ -583,7 +583,7 @@ private:
 		config.exposure_mode_stream2 = automaticExposureStream2 ? 1 : 0;
 		config.exposure_time = std::max(std::min(exposureTime, configMax.exposure_time), configMin.exposure_time);
 		config.exposure_time_stream2 = std::max(std::min(exposureTimeStream2, configMax.exposure_time_stream2), configMin.exposure_time_stream2);
-		config.max_noise = std::max(std::min(0.015, configMax.max_noise), configMin.max_noise);
+		config.max_noise = std::max(std::min(0.0175, configMax.max_noise), configMin.max_noise);
 		config.max_free_noise = std::max(std::min(0.06, configMax.max_free_noise), configMin.max_free_noise);
 		config.range_factor = std::max(std::min(rangeFactor, configMax.range_factor), configMin.range_factor);
 		config.min_depth = std::max(std::min(min_depth, configMax.min_depth), configMin.min_depth);
@@ -1177,8 +1177,8 @@ private:
 		Eigen::Vector2i pixel;
 		const Eigen::Vector2i pixel_center(V_RES/2.0,H_RES/2.0);
 
-		const float maxNoise = 0.015;//(float)config.max_noise;
-		const float maxFreeNoise = 0.06;//(float)config.max_free_noise;
+		const float maxNoise = (float)config.max_noise;
+		const float maxFreeNoise = (float)config.max_free_noise;
 
 		for(size_t i = 0; i < data.points.size(); ++i, ++it_data, ++it_img_depth, ++it_img_mono_16, ++it_img_noise)
 		{
@@ -1226,9 +1226,20 @@ private:
 			}
 			if(it_data->noise >= maxNoise)
 			{
-				*it_cloud_noise_x = it_data->x;
-				*it_cloud_noise_y = it_data->y;
-				*it_cloud_noise_z = config.max_depth; //it_data->z;
+
+				float x = it_data->x;
+				float y = it_data->y;
+				float z = it_data->z;
+
+				Eigen::Vector3d vect(x,y,z);
+				vect /= vect.norm();
+				vect *= config.max_depth;
+
+
+				*it_cloud_noise_x = vect(0);
+				*it_cloud_noise_y = vect(1);
+				*it_cloud_noise_z = vect(2);
+
 				*it_cloud_noise_noise = it_data->noise;                    
 				*it_cloud_noise_intensity = it_data->grayValue; 
 			}
