@@ -47,11 +47,17 @@ Features:
    ```
 6. Make sure that your user is in the plugdev group (you can use the command groups to check). If not, you need to add your user to the group:
 
-sudo usermod -a -G plugdev <your-user-name-here>
+   ```
+   sudo usermod -a -G plugdev <your-user-name-here>
+   ```
 Afterwards, you have to log out and log back in for the changes to take effect.
+
 7. Run `catkin_make`
+
 8. Plug in the CamBoard pico flexx device
+
 9. Run `roslaunch pico_flexx_driver pico_flexx_driver.launch publish_tf:=true`
+
 10. Start `rosrun rviz rviz`, set the `Fixed frame` to `pico_flexx_link` and add a `PointCloud2` and select `/pico_flexx/points`
 
 *Note: The pico_flexx_driver automatically tries to use the most recent version that is extracted in `<catkin_ws>/src/pico_flexx_driver/royale`.
